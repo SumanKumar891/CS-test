@@ -1,6 +1,5 @@
 import 'dart:convert';
 import 'dart:ui';
-import 'package:cloud_sense_webapp/main.dart';
 import 'package:flutter/material.dart';
 import 'package:shared_preferences/shared_preferences.dart';
 import 'package:amplify_flutter/amplify_flutter.dart';
@@ -302,9 +301,6 @@ class _AccountInfoPageState extends State<AccountInfoPage> {
               });
               deviceCategories.removeWhere((key, value) => value.isEmpty);
             });
-            // IMPORTANT: Trigger notification subscription management
-            // This will check if the user still has ammonia sensors and update token accordingly
-            await checkAndUpdateNotificationSubscription();
           } else {
             print('Response Status Code: ${response.statusCode}');
             print('Response Body: ${response.body}');

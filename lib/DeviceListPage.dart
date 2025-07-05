@@ -2,10 +2,8 @@ import 'dart:ui';
 import 'package:cloud_sense_webapp/LoginPage.dart';
 import 'package:cloud_sense_webapp/buffalodata.dart';
 import 'package:cloud_sense_webapp/cowdata.dart';
-import 'package:cloud_sense_webapp/main.dart';
 import 'package:cloud_sense_webapp/manuallyenter.dart';
 import 'package:cloud_sense_webapp/map.dart';
-import 'package:firebase_messaging/firebase_messaging.dart';
 
 import 'package:flutter/material.dart';
 import 'package:http/http.dart' as http;
@@ -141,11 +139,10 @@ class _DataDisplayPageState extends State<DataDisplayPage> {
         return 'SSMET Sensors';
       case 'CF':
         return 'Colonel Farm Sensors';
-      case 'CB':
-        return 'COD/BOD Sensors';
       case 'SV':
         return 'SVPU Sensors';
-
+      case 'CB':
+        return 'COD/BOD Sensors';
       default:
         return 'Rain Sensors';
     }
@@ -154,8 +151,6 @@ class _DataDisplayPageState extends State<DataDisplayPage> {
   Future<void> _handleLogout() async {
     try {
       print("[Logout] Starting logout process.");
-
-      await _unsubscribeFromAllTopics();
 
       await Amplify.Auth.signOut();
       SharedPreferences prefs = await SharedPreferences.getInstance();
@@ -184,46 +179,6 @@ class _DataDisplayPageState extends State<DataDisplayPage> {
       } catch (logoutError) {
         print("[Logout] Fallback logout failed: $logoutError");
       }
-    }
-  }
-
-// Add this method to handle unsubscription from all topics
-  Future<void> _unsubscribeFromAllTopics() async {
-    try {
-      FirebaseMessaging messaging = FirebaseMessaging.instance;
-      String? token = await messaging.getToken();
-
-      if (token == null) {
-        print("[Unsubscribe] No FCM token available.");
-        return;
-      }
-
-      SharedPreferences prefs = await SharedPreferences.getInstance();
-      String? email = prefs.getString('email') ?? 'Unknown';
-      print("[Unsubscribe] User: $email | Token: $token");
-
-      bool? isGpsSubscribed = prefs.getBool('isGpsTokenSubscribed');
-      bool? isAmmoniaSubscribed = prefs.getBool('isAmmoniaTokenSubscribed');
-
-      if (isGpsSubscribed == true) {
-        print(
-            "[Unsubscribe] GPS subscription found. Proceeding to unsubscribe...");
-        await unsubscribeFromGpsSnsTopic(token);
-      } else {
-        print("[Unsubscribe] No GPS subscription flag found.");
-      }
-
-      if (isAmmoniaSubscribed == true) {
-        print(
-            "[Unsubscribe] Ammonia subscription found. Proceeding to unsubscribe...");
-        await unsubscribeFromSnsTopic(token);
-      } else {
-        print("[Unsubscribe] No Ammonia subscription flag found.");
-      }
-
-      print("[Unsubscribe] All applicable topics processed.");
-    } catch (e) {
-      print("[Unsubscribe] Error during unsubscription: $e");
     }
   }
 
@@ -314,6 +269,26 @@ class _DataDisplayPageState extends State<DataDisplayPage> {
                             _deviceCategories.isNotEmpty
                                 ? _buildDeviceCards()
                                 : _buildNoDevicesCard(),
+                            // SizedBox(height: 20),
+                            // ElevatedButton.icon(
+                            //   onPressed: () {
+                            //     Navigator.push(
+                            //       context,
+                            //       MaterialPageRoute(
+                            //         builder: (context) =>
+                            //             MapPage(), // Navigate to MapPage
+                            //       ),
+                            //     );
+                            //   },
+                            //   icon: Icon(Icons.map),
+                            //   label: Text('View Map'),
+                            //   style: ElevatedButton.styleFrom(
+                            //     padding: EdgeInsets.symmetric(
+                            //         horizontal: 20, vertical: 10),
+                            //     backgroundColor: Colors.black,
+                            //     foregroundColor: Colors.white,
+                            //   ),
+                            // ),
                           ],
                         ),
                 ),

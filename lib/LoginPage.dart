@@ -1,7 +1,4 @@
 import 'package:amplify_flutter/amplify_flutter.dart';
-import 'package:cloud_sense_webapp/main.dart';
-import 'package:cloud_sense_webapp/map.dart';
-import 'package:firebase_messaging/firebase_messaging.dart';
 import 'package:flutter/material.dart';
 import 'package:email_validator/email_validator.dart';
 import 'dart:ui';
@@ -43,26 +40,16 @@ class _SignInSignUpScreenState extends State<SignInSignUpScreen> {
     try {
       var currentUser = await Amplify.Auth.getCurrentUser();
       if (currentUser != null) {
-        // Check if this is the special user
-        if (currentUser.username.trim().toLowerCase() ==
-            "05agriculture.05@gmail.com") {
-          Navigator.pushReplacement(
-            context,
-            MaterialPageRoute(
-              builder: (context) => MapPage(),
-            ),
-          );
-        } else {
-          Navigator.pushReplacement(
-            context,
-            MaterialPageRoute(
-              builder: (context) => DataDisplayPage(),
-            ),
-          );
-        }
+        // If user is already signed in, navigate to DeviceListPage
+        Navigator.pushReplacement(
+          context,
+          MaterialPageRoute(
+            builder: (context) => DataDisplayPage(),
+          ),
+        );
       }
-    } catch (_) {
-      // Not signed in — stay on HomePage
+    } catch (e) {
+      // Ignore errors — means no current user
     }
   }
 
@@ -84,7 +71,7 @@ class _SignInSignUpScreenState extends State<SignInSignUpScreen> {
       try {
         await Amplify.Auth.signOut();
       } catch (e) {
-        print("Ignoring sign-out error before sign-in: $e");
+        // Ignoring errors here since user might not be signed in
       }
 
       // Attempt to sign in with provided credentials
@@ -97,45 +84,7 @@ class _SignInSignUpScreenState extends State<SignInSignUpScreen> {
         // Store email in shared preferences for session management
         SharedPreferences prefs = await SharedPreferences.getInstance();
         String email = _emailController.text.trim().toLowerCase();
-        await prefs.setString('email', email);
-
-        print("✅ User logged in: $email");
-
-        // 🔹 Get FCM Token and subscribe to appropriate SNS topic
-        String? token = await FirebaseMessaging.instance.getToken();
-        if (token != null) {
-          if (email == "05agriculture.05@gmail.com") {
-            print("Subscribing $email to GPS SNS topic.");
-            await subscribeToGpsSnsTopic(token);
-            await prefs.setBool('isGpsTokenSubscribed', true);
-            // Ensure ammonia is unsubscribed for this user
-            bool? wasAmmoniaSubscribed =
-                prefs.getBool('isAmmoniaTokenSubscribed');
-            if (wasAmmoniaSubscribed == true) {
-              await unsubscribeFromSnsTopic(token);
-              await prefs.remove('isAmmoniaTokenSubscribed');
-            }
-          } else {
-            bool hasAmmoniaSensor = await userHasAmmoniaSensor(email);
-            if (hasAmmoniaSensor) {
-              print("Subscribing $email to ammonia SNS topic.");
-              await subscribeToSnsTopic(token);
-              await prefs.setBool('isAmmoniaTokenSubscribed', true);
-            } else {
-              print(
-                  "No ammonia sensor found for $email. Skipping subscription.");
-            }
-            // Ensure GPS is unsubscribed for non-authorized users
-            bool? wasGpsSubscribed = prefs.getBool('isGpsTokenSubscribed');
-            if (wasGpsSubscribed == true) {
-              await unsubscribeFromGpsSnsTopic(token);
-              await prefs.remove('isGpsTokenSubscribed');
-            }
-          }
-          print("✅ Subscription handling completed after login.");
-        } else {
-          print("⚠ FCM Token not available at login.");
-        }
+        await prefs.setString('email', _emailController.text);
 
         // ✅ Navigate based on specific user
         if (email == "05agriculture.05@gmail.com") {
@@ -149,11 +98,7 @@ class _SignInSignUpScreenState extends State<SignInSignUpScreen> {
         _showSnackbar('Sign-in failed');
       }
     } on AuthException catch (e) {
-      print("AuthException during sign-in: ${e.message}");
       _showSnackbar(e.message); // Show error message if sign-in fails
-    } catch (e) {
-      print("Unexpected error during sign-in: $e");
-      _showSnackbar('An unexpected error occurred');
     } finally {
       setState(() {
         _isLoading = false; // Hide loading indicator

@@ -1,8 +1,7 @@
 import 'dart:async';
 import 'dart:convert';
+import 'package:amplify_flutter/amplify_flutter.dart';
 import 'package:cloud_sense_webapp/HomePage.dart';
-import 'package:cloud_sense_webapp/main.dart';
-import 'package:firebase_messaging/firebase_messaging.dart';
 import 'package:flutter/material.dart';
 import 'package:flutter_map/flutter_map.dart';
 import 'package:latlong2/latlong.dart';
@@ -11,8 +10,7 @@ import 'package:intl/intl.dart';
 import 'package:shared_preferences/shared_preferences.dart';
 import 'package:latlong2/latlong.dart' show Distance;
 import 'package:provider/provider.dart';
-import 'package:amplify_flutter/amplify_flutter.dart';
-import 'package:amplify_auth_cognito/amplify_auth_cognito.dart';
+import 'package:cloud_sense_webapp/main.dart';
 
 enum MapType { defaultMap, satellite, terrain }
 
@@ -58,7 +56,7 @@ class _MapPageState extends State<MapPage> {
     super.initState();
     mapController = MapController();
     _loadPreviousPositions();
-    //Start auto-reload timer to refresh every 60 seconds
+    // Start auto-reload timer to refresh every 60 seconds
     _startAutoReload();
   }
 
@@ -72,6 +70,7 @@ class _MapPageState extends State<MapPage> {
 
   @override
   void dispose() {
+    // Cancel the auto-reload timer to prevent memory leaks
     _autoReloadTimer?.cancel();
     searchController.dispose();
     mapController.dispose();
@@ -81,7 +80,6 @@ class _MapPageState extends State<MapPage> {
   Future<void> _handleLogout() async {
     try {
       // First, unsubscribe from all notification topics before logout
-      await _unsubscribeFromAllTopics();
 
       // Then proceed with logout
       await Amplify.Auth.signOut();
@@ -113,42 +111,6 @@ class _MapPageState extends State<MapPage> {
       } catch (logoutError) {
         print('Error during fallback logout: $logoutError');
       }
-    }
-  }
-
-// Add this method to handle unsubscription from all topics
-  Future<void> _unsubscribeFromAllTopics() async {
-    try {
-      FirebaseMessaging messaging = FirebaseMessaging.instance;
-      String? token = await messaging.getToken();
-
-      if (token == null) {
-        print("No FCM token available for unsubscription");
-        return;
-      }
-
-      SharedPreferences prefs = await SharedPreferences.getInstance();
-      String? email = prefs.getString('email');
-
-      print("Unsubscribing user: $email with token: $token");
-
-      // Check if user was subscribed to GPS notifications and unsubscribe
-      bool? isGpsSubscribed = prefs.getBool('isGpsTokenSubscribed');
-      if (isGpsSubscribed == true) {
-        print("Unsubscribing from GPS SNS topic during logout");
-        await unsubscribeFromGpsSnsTopic(token);
-      }
-
-      // Check if user was subscribed to ammonia notifications and unsubscribe
-      bool? isAmmoniaSubscribed = prefs.getBool('isAmmoniaTokenSubscribed');
-      if (isAmmoniaSubscribed == true) {
-        print("Unsubscribing from ammonia SNS topic during logout");
-        await unsubscribeFromSnsTopic(token);
-      }
-
-      print("Unsubscription from all topics completed");
-    } catch (e) {
-      print("Error unsubscribing from topics during logout: $e");
     }
   }
 
