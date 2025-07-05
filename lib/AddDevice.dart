@@ -1,4 +1,6 @@
+import 'package:cloud_sense_webapp/main.dart';
 import 'package:cloud_sense_webapp/manuallyenter.dart';
+import 'package:firebase_messaging/firebase_messaging.dart';
 import 'package:flutter/material.dart';
 import 'package:mobile_scanner/mobile_scanner.dart';
 import 'package:http/http.dart' as http;
@@ -86,6 +88,7 @@ class _QRScannerPageState extends State<QRScannerPage> {
     );
   }
 
+  // Modify the _addDevice method to handle token subscription
   Future<void> _addDevice(String deviceID) async {
     final String apiUrl =
         "https://ymfmk699j5.execute-api.us-east-1.amazonaws.com/default/Cloudsense_user_add_devices?email_id=$_email&device_id=$deviceID";
@@ -98,6 +101,26 @@ class _QRScannerPageState extends State<QRScannerPage> {
           message = "Device added successfully.";
           messageColor = Colors.green;
         });
+
+        // Check if the added device is an Ammonia (NH) sensor
+        if (deviceID.startsWith('NH')) {
+          // Regenerate and subscribe the token
+          try {
+            // Get the current FCM token
+            FirebaseMessaging messaging = FirebaseMessaging.instance;
+            String? token = await messaging.getToken();
+
+            if (token != null) {
+              // Call the method to manage notification subscription
+              await manageNotificationSubscription();
+              print("Token regenerated and subscribed for NH sensor");
+            } else {
+              print("Failed to get FCM token");
+            }
+          } catch (tokenError) {
+            print("Error managing token subscription: $tokenError");
+          }
+        }
       } else {
         setState(() {
           message = "Failed to add device. Please try again.";
@@ -150,24 +173,27 @@ class _QRScannerPageState extends State<QRScannerPage> {
               ),
               child: MobileScanner(
                 controller: _controller,
-                allowDuplicates: false,
-                onDetect: (barcode, args) {
-                  final String? code = barcode.rawValue;
-                  if (code != null && code != scannedQRCode) {
-                    setState(() {
-                      scannedQRCode = code;
-                      message = "Detected QR Code";
-                    });
-                    _controller.stop();
-                    DeviceUtils.showConfirmationDialog(
-                      context: context,
-                      deviceId: code,
-                      devices: widget.devices,
-                      onConfirm: () async {
-                        await _addDevice(code);
-                        await _showSuccessMessage();
-                      },
-                    );
+                onDetect: (BarcodeCapture capture) {
+                  final List<Barcode> barcodes = capture.barcodes;
+                  for (final barcode in barcodes) {
+                    final String? code = barcode.rawValue;
+                    if (code != null && code != scannedQRCode) {
+                      setState(() {
+                        scannedQRCode = code;
+                        message = "Detected QR Code";
+                      });
+                      _controller.stop();
+                      DeviceUtils.showConfirmationDialog(
+                        context: context,
+                        deviceId: code,
+                        devices: widget.devices,
+                        onConfirm: () async {
+                          await _addDevice(code);
+                          await _showSuccessMessage();
+                        },
+                      );
+                      break; // Exit after processing the first valid barcode
+                    }
                   }
                 },
               ),

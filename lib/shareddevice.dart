@@ -9,6 +9,7 @@ class DeviceUtils {
     if (deviceId.startsWith('SS')) return 'Soil Sensor';
     if (deviceId.startsWith('WQ')) return 'Water Quality Sensor';
     if (deviceId.startsWith('WS')) return 'Water Sensor';
+    if (deviceId.startsWith('IT')) return 'IIT Sensor';
     if (deviceId.startsWith('DO')) return 'DO Sensor';
     if (deviceId.startsWith('LU')) return 'LU Sensor';
     if (deviceId.startsWith('TE')) return 'TE Sensor';
@@ -17,7 +18,12 @@ class DeviceUtils {
     if (deviceId.startsWith('CS')) return 'Cow Sensor';
     if (deviceId.startsWith('TH')) return 'Temperature Sensor';
     if (deviceId.startsWith('NH')) return 'Ammonia Sensor';
-    return 'Unknown Sensor';
+    if (deviceId.startsWith('FS')) return 'Forest Sensor';
+    if (deviceId.startsWith('SM')) return 'SSMET Sensor';
+    if (deviceId.startsWith('CF')) return 'Colonel Farm Sensor';
+    if (deviceId.startsWith('SV')) return 'SVPU Sensor';
+    if (deviceId.startsWith('CB')) return 'COD/BOD Sensor';
+    return 'Rain Sensor';
   }
 
   // Extract the sensor prefix from the device ID
@@ -26,7 +32,7 @@ class DeviceUtils {
     String prefix = deviceId.substring(0, 2);
     return validPrefixes.contains(prefix)
         ? prefix
-        : 'UN'; // 'UN' for unknown sensors
+        : 'RS'; // 'UN' for unknown sensors
   }
 
   // Display a confirmation dialog for adding a device
@@ -42,7 +48,7 @@ class DeviceUtils {
     // Count existing devices of the same type
     final categoryDevices = devices.values
         .expand((deviceList) => deviceList)
-        .where((device) => sensorPrefix == 'UN'
+        .where((device) => sensorPrefix == 'RS'
             ? !validPrefixes.any(
                 (prefix) => device.startsWith(prefix)) // Unknown sensor check
             : device.startsWith(sensorPrefix))
@@ -124,5 +130,11 @@ class DeviceUtils {
     'CS',
     'TH',
     'NH',
+    'IT',
+    'FS',
+    'SM',
+    'CF',
+    'SV',
+    'CB'
   ];
 }

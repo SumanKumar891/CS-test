@@ -1,3 +1,5 @@
+import 'package:cloud_sense_webapp/main.dart';
+import 'package:firebase_messaging/firebase_messaging.dart';
 import 'package:flutter/material.dart';
 import 'package:http/http.dart' as http;
 import 'package:shared_preferences/shared_preferences.dart';
@@ -78,7 +80,7 @@ class _ManualEntryPageState extends State<ManualEntryPage> {
     );
   }
 
-  // Add a device by sending a GET request to the API
+  // Modify the _addDevice method to handle token subscription
   Future<void> _addDevice(String deviceID) async {
     final String apiUrl =
         "https://ymfmk699j5.execute-api.us-east-1.amazonaws.com/default/Cloudsense_user_add_devices?email_id=$_email&device_id=$deviceID";
@@ -91,6 +93,26 @@ class _ManualEntryPageState extends State<ManualEntryPage> {
           message = "Device added successfully.";
           messageColor = Colors.green;
         });
+
+        // Check if the added device is an Ammonia (NH) sensor
+        if (deviceID.startsWith('NH')) {
+          // Regenerate and subscribe the token
+          try {
+            // Get the current FCM token
+            FirebaseMessaging messaging = FirebaseMessaging.instance;
+            String? token = await messaging.getToken();
+
+            if (token != null) {
+              // Call the method to manage notification subscription
+              await manageNotificationSubscription();
+              print("Token regenerated and subscribed for NH sensor");
+            } else {
+              print("Failed to get FCM token");
+            }
+          } catch (tokenError) {
+            print("Error managing token subscription: $tokenError");
+          }
+        }
       } else {
         setState(() {
           message = "Failed to add device. Please try again.";

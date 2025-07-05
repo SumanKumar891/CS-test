@@ -2,7 +2,10 @@ import 'dart:ui';
 import 'package:cloud_sense_webapp/LoginPage.dart';
 import 'package:cloud_sense_webapp/buffalodata.dart';
 import 'package:cloud_sense_webapp/cowdata.dart';
+import 'package:cloud_sense_webapp/main.dart';
 import 'package:cloud_sense_webapp/manuallyenter.dart';
+import 'package:cloud_sense_webapp/map.dart';
+import 'package:firebase_messaging/firebase_messaging.dart';
 
 import 'package:flutter/material.dart';
 import 'package:http/http.dart' as http;
@@ -31,29 +34,29 @@ class _DataDisplayPageState extends State<DataDisplayPage> {
 
   Future<void> _loadEmail() async {
     SharedPreferences prefs = await SharedPreferences.getInstance();
-    String? email = prefs.getString('email');
+    String? savedEmail = prefs.getString('email');
 
-    if (email != null) {
+    try {
+      var currentUser = await Amplify.Auth.getCurrentUser();
+      if (currentUser.username.trim().toLowerCase() ==
+          "05agriculture.05@gmail.com") {
+        // Redirect to DeviceInfoPage if this is the special user
+        Navigator.pushReplacementNamed(context, '/deviceinfo');
+        return; // Exit further execution
+      }
+      // Else continue on DeviceListPage normally
       setState(() {
-        _email = email;
+        _email = savedEmail ?? currentUser.username;
       });
       _fetchData();
-    } else {
-      // Email not found, clear any authentication and redirect to login/signup page
-      try {
-        await Amplify.Auth
-            .signOut(); // Optional: Sign out from Amplify if authenticated
-      } catch (e) {
-        print("Error signing out from Amplify: $e");
-      }
-
-      // Clear saved data in SharedPreferences
+    } catch (e) {
+      // No signed-in user — clear prefs & navigate to login screen
+      await Amplify.Auth.signOut();
       await prefs.clear();
-
       Navigator.pushAndRemoveUntil(
         context,
         MaterialPageRoute(builder: (context) => SignInSignUpScreen()),
-        (Route<dynamic> route) => false,
+        (route) => false,
       );
     }
   }
@@ -114,6 +117,10 @@ class _DataDisplayPageState extends State<DataDisplayPage> {
         return 'Soil Sensors';
       case 'WQ':
         return 'Water Quality Sensors';
+      case 'DO':
+        return 'DO Sensors';
+      case 'IT':
+        return 'IIT Weather Sensors';
       case 'WS':
         return 'Water Sensors';
       case 'LU':
@@ -128,19 +135,96 @@ class _DataDisplayPageState extends State<DataDisplayPage> {
         return 'Temperature Sensors';
       case 'NH':
         return 'Ammonia Sensors';
+      case 'FS':
+        return 'Forest Sensors';
+      case 'SM':
+        return 'SSMET Sensors';
+      case 'CF':
+        return 'Colonel Farm Sensors';
+      case 'CB':
+        return 'COD/BOD Sensors';
+      case 'SV':
+        return 'SVPU Sensors';
+
       default:
-        return 'Unknown Sensors';
+        return 'Rain Sensors';
     }
   }
 
-  Future<void> _logout() async {
-    SharedPreferences prefs = await SharedPreferences.getInstance();
-    await prefs.remove('email'); // Clear the saved email
-    Navigator.pushReplacement(
-      context,
-      MaterialPageRoute(
-          builder: (context) => HomePage()), // Navigate to HomePage
-    );
+  Future<void> _handleLogout() async {
+    try {
+      print("[Logout] Starting logout process.");
+
+      await _unsubscribeFromAllTopics();
+
+      await Amplify.Auth.signOut();
+      SharedPreferences prefs = await SharedPreferences.getInstance();
+      await prefs.clear();
+      print("[Logout] User signed out and preferences cleared.");
+
+      Navigator.pushAndRemoveUntil(
+        context,
+        MaterialPageRoute(builder: (context) => HomePage()),
+        (Route<dynamic> route) => false,
+      );
+    } catch (e) {
+      print("[Logout] Primary logout failed: $e");
+      // Fallback logout
+      try {
+        await Amplify.Auth.signOut();
+        SharedPreferences prefs = await SharedPreferences.getInstance();
+        await prefs.clear();
+        print("[Logout] Fallback logout success.");
+
+        Navigator.pushAndRemoveUntil(
+          context,
+          MaterialPageRoute(builder: (context) => HomePage()),
+          (Route<dynamic> route) => false,
+        );
+      } catch (logoutError) {
+        print("[Logout] Fallback logout failed: $logoutError");
+      }
+    }
+  }
+
+// Add this method to handle unsubscription from all topics
+  Future<void> _unsubscribeFromAllTopics() async {
+    try {
+      FirebaseMessaging messaging = FirebaseMessaging.instance;
+      String? token = await messaging.getToken();
+
+      if (token == null) {
+        print("[Unsubscribe] No FCM token available.");
+        return;
+      }
+
+      SharedPreferences prefs = await SharedPreferences.getInstance();
+      String? email = prefs.getString('email') ?? 'Unknown';
+      print("[Unsubscribe] User: $email | Token: $token");
+
+      bool? isGpsSubscribed = prefs.getBool('isGpsTokenSubscribed');
+      bool? isAmmoniaSubscribed = prefs.getBool('isAmmoniaTokenSubscribed');
+
+      if (isGpsSubscribed == true) {
+        print(
+            "[Unsubscribe] GPS subscription found. Proceeding to unsubscribe...");
+        await unsubscribeFromGpsSnsTopic(token);
+      } else {
+        print("[Unsubscribe] No GPS subscription flag found.");
+      }
+
+      if (isAmmoniaSubscribed == true) {
+        print(
+            "[Unsubscribe] Ammonia subscription found. Proceeding to unsubscribe...");
+        await unsubscribeFromSnsTopic(token);
+      } else {
+        print("[Unsubscribe] No Ammonia subscription flag found.");
+      }
+
+      print("[Unsubscribe] All applicable topics processed.");
+    } catch (e) {
+      print("[Unsubscribe] Error during unsubscription: $e");
+    }
   }
 
   @override
@@ -182,24 +266,7 @@ class _DataDisplayPageState extends State<DataDisplayPage> {
                   elevation: 0,
                   actions: [
                     TextButton.icon(
-                      onPressed: () async {
-                        try {
-                          await Amplify.Auth.signOut();
-                          SharedPreferences prefs =
-                              await SharedPreferences.getInstance();
-                          await prefs.remove('email');
-
-                          Navigator.pushAndRemoveUntil(
-                            context,
-                            MaterialPageRoute(
-                              builder: (context) => HomePage(),
-                            ),
-                            (Route<dynamic> route) => false,
-                          );
-                        } catch (e) {
-                          // Handle error during logout if necessary
-                        }
-                      }, // Logout function
+                      onPressed: _handleLogout,
                       icon: Icon(
                         Icons.logout,
                         color: Colors.white,
@@ -247,26 +314,6 @@ class _DataDisplayPageState extends State<DataDisplayPage> {
                             _deviceCategories.isNotEmpty
                                 ? _buildDeviceCards()
                                 : _buildNoDevicesCard(),
-                            // SizedBox(height: 20),
-                            // ElevatedButton.icon(
-                            //   onPressed: () {
-                            //     Navigator.push(
-                            //       context,
-                            //       MaterialPageRoute(
-                            //         builder: (context) =>
-                            //             MapPage(), // Navigate to MapPage
-                            //       ),
-                            //     );
-                            //   },
-                            //   icon: Icon(Icons.map),
-                            //   label: Text('View Map'),
-                            //   style: ElevatedButton.styleFrom(
-                            //     padding: EdgeInsets.symmetric(
-                            //         horizontal: 20, vertical: 10),
-                            //     backgroundColor: Colors.black,
-                            //     foregroundColor: Colors.white,
-                            //   ),
-                            // ),
                           ],
                         ),
                 ),
@@ -498,46 +545,69 @@ class _DataDisplayPageState extends State<DataDisplayPage> {
           child: Column(
             mainAxisAlignment: MainAxisAlignment.center,
             children: [
-              // Message Text
+              // "No devices found." message
               Padding(
                 padding: const EdgeInsets.all(16.0),
                 child: Text(
-                  'No devices found.',
+                  'No Device Found',
                   textAlign: TextAlign.center,
                   style: TextStyle(
-                    fontSize: 25,
+                    fontSize: 26,
+                    fontWeight: FontWeight.bold,
                     color: const Color.fromARGB(255, 235, 28, 28),
                   ),
                 ),
               ),
-              // Plus sign above the button
-              Padding(
-                padding: const EdgeInsets.all(16.0),
-                child: Icon(
-                  Icons.add,
-                  size: 80,
+              SizedBox(height: 10),
+              // "Add New Device" heading
+              Text(
+                'Add New Device',
+                style: TextStyle(
+                  fontSize: 24,
+                  fontWeight: FontWeight.bold,
                   color: Colors.black,
                 ),
               ),
-              // Add Devices button
+              SizedBox(height: 20),
               ElevatedButton(
                 style: ElevatedButton.styleFrom(
-                  padding: EdgeInsets.symmetric(horizontal: 32, vertical: 16),
+                  padding: EdgeInsets.symmetric(horizontal: 28, vertical: 10),
                   backgroundColor: Colors.black,
                 ),
                 onPressed: () {
                   Navigator.push(
                     context,
                     MaterialPageRoute(
-                      builder: (context) =>
-                          QRScannerPage(devices: _deviceCategories),
+                      builder: (context) => QRScannerPage(
+                        devices: _deviceCategories,
+                      ),
                     ),
                   );
                 },
                 child: Text(
-                  'Add Devices',
-                  style: TextStyle(
-                      color: const Color.fromARGB(255, 245, 241, 240)),
+                  'Scan QR Code',
+                  style: TextStyle(fontSize: 16),
+                ),
+              ),
+              SizedBox(height: 16),
+              ElevatedButton(
+                style: ElevatedButton.styleFrom(
+                  padding: EdgeInsets.symmetric(horizontal: 28, vertical: 10),
+                  backgroundColor: Colors.black,
+                ),
+                onPressed: () {
+                  Navigator.push(
+                    context,
+                    MaterialPageRoute(
+                      builder: (context) => ManualEntryPage(
+                        devices: _deviceCategories,
+                      ),
+                    ),
+                  );
+                },
+                child: Text(
+                  'Add Manually',
+                  style: TextStyle(fontSize: 16),
                 ),
               ),
             ],
@@ -571,6 +641,14 @@ class _DataDisplayPageState extends State<DataDisplayPage> {
       case 'Ammonia Sensors': // Color for CPS Lab Sensors
         return const Color.fromARGB(255, 167, 158, 172);
       case 'Temperature Sensors': // Color for CPS Lab Sensors
+        return const Color.fromARGB(255, 167, 158, 172);
+      case 'SSMET Sensors': // Color for CPS Lab Sensors
+        return const Color.fromARGB(255, 167, 158, 172);
+      case 'Colonel Farm Sensors': // Color for CPS Lab Sensors
+        return const Color.fromARGB(255, 167, 158, 172);
+      case 'SVPU Sensors': // Color for CPS Lab Sensors
+        return const Color.fromARGB(255, 167, 158, 172);
+      case 'COD/BOD Sensors': // Color for CPS Lab Sensors
         return const Color.fromARGB(255, 167, 158, 172);
       default:
         return const Color.fromARGB(255, 167, 158, 172);

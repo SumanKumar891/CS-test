@@ -1,5 +1,6 @@
 import 'dart:convert';
 import 'dart:io';
+import 'dart:math' as math;
 import 'package:cloud_sense_webapp/downloadcsv.dart';
 import 'package:cloud_sense_webapp/push_notifications.dart';
 import 'package:file_picker/file_picker.dart';
@@ -17,6 +18,124 @@ import 'package:csv/csv.dart';
 import 'package:universal_html/html.dart' as html;
 import 'package:shared_preferences/shared_preferences.dart';
 import 'package:intl/intl.dart';
+import 'dart:async';
+
+import 'dart:math' as math;
+import 'package:flutter/material.dart';
+
+// Updated CompassNeedlePainter with corrected arrowhead positioning
+class CompassNeedlePainter extends CustomPainter {
+  CompassNeedlePainter();
+
+  @override
+  void paint(Canvas canvas, Size size) {
+    final center = Offset(size.width / 2, size.height / 2);
+    final radius = size.width / 2;
+
+    // Define the needle length (60% of radius as per your code)
+    final needleLength = radius * 0.4;
+
+    // Paint for the red tip (pointing to wind direction, initially pointing up/North)
+    final redPaint = Paint()
+      ..color = Colors.red
+      ..strokeWidth = 4
+      ..style = PaintingStyle.stroke;
+
+    // Paint for the white tail (opposite direction)
+    final whitePaint = Paint()
+      ..color = Colors.white
+      ..strokeWidth = 4
+      ..style = PaintingStyle.stroke;
+
+    // Paint for the red arrowhead (filled triangle)
+    final arrowPaint = Paint()
+      ..color = Colors.red
+      ..style = PaintingStyle.fill;
+
+    // Draw the red tip (from center to North, will be rotated by Transform.rotate)
+    final tipX = center.dx;
+    final tipY = center.dy - needleLength; // Pointing up (North)
+    canvas.drawLine(center, Offset(tipX, tipY), redPaint);
+
+    // Draw the white tail (from center to South)
+    final tailX = center.dx;
+    final tailY = center.dy + needleLength; // Pointing down (South)
+    canvas.drawLine(center, Offset(tailX, tailY), whitePaint);
+
+    // Draw the arrowhead at the tip of the red line
+    final arrowSize = 8.0; // Width of the arrowhead base
+    final arrowHeight = 10.0; // Height of the arrowhead (from base to tip)
+    final arrowPath = Path();
+    // The base of the arrowhead is at the end of the red line (tipX, tipY)
+    // Calculate the two base points perpendicular to the needle direction
+    // Since the needle points up (North) initially, the direction is along the negative Y-axis
+    // Perpendicular direction is along the X-axis (left and right)
+    final baseLeft = Offset(tipX - arrowSize / 2, tipY); // Left base point
+    final baseRight = Offset(tipX + arrowSize / 2, tipY); // Right base point
+    // The tip of the arrowhead extends further in the direction of the red line (upward)
+    final arrowTip = Offset(
+        tipX, tipY - arrowHeight); // Tip of the arrowhead (further North)
+    arrowPath.moveTo(arrowTip.dx, arrowTip.dy); // Tip of the arrow
+    arrowPath.lineTo(baseLeft.dx, baseLeft.dy); // Left base
+    arrowPath.lineTo(baseRight.dx, baseRight.dy); // Right base
+    arrowPath.close(); // Close the triangle
+    canvas.drawPath(arrowPath, arrowPaint);
+
+    // Draw a small circle at the center to cover the intersection
+    final centerPaint = Paint()
+      ..color = Colors.grey.shade300
+      ..style = PaintingStyle.fill;
+    canvas.drawCircle(center, 5, centerPaint);
+  }
+
+  @override
+  bool shouldRepaint(covariant CustomPainter oldDelegate) => true;
+}
+
+class CompassBackgroundPainter extends CustomPainter {
+  @override
+  void paint(Canvas canvas, Size size) {
+    final center = Offset(size.width / 2, size.height / 2);
+    final radius = size.width / 2;
+
+    final gradientPaint = Paint()
+      ..shader = LinearGradient(
+        colors: [Colors.black.withOpacity(0.7), Colors.black.withOpacity(0.5)],
+        begin: Alignment.topLeft,
+        end: Alignment.bottomRight,
+      ).createShader(Rect.fromCircle(center: center, radius: radius))
+      ..style = PaintingStyle.fill;
+
+    canvas.drawCircle(center, radius, gradientPaint);
+
+    final innerCirclePaint = Paint()
+      ..color = Colors.grey.withOpacity(0.2)
+      ..style = PaintingStyle.fill;
+    canvas.drawCircle(center, radius * 0.8, innerCirclePaint);
+
+    final tickPaint = Paint()
+      ..color = Colors.white
+      ..strokeWidth = 2;
+    final tickLength = 8.0;
+    for (int i = 0; i < 360; i += 30) {
+      final angle = i * math.pi / 180;
+      final startX = center.dx + (radius - tickLength) * math.sin(angle);
+      final startY = center.dy - (radius - tickLength) * math.cos(angle);
+      final endX = center.dx + radius * math.sin(angle);
+      final endY = center.dy - radius * math.cos(angle);
+      canvas.drawLine(Offset(startX, startY), Offset(endX, endY), tickPaint);
+    }
+
+    final borderPaint = Paint()
+      ..color = Colors.white
+      ..style = PaintingStyle.stroke
+      ..strokeWidth = 2;
+    canvas.drawCircle(center, radius, borderPaint);
+  }
+
+  @override
+  bool shouldRepaint(covariant CustomPainter oldDelegate) => false;
+}
 
 class DeviceGraphPage extends StatefulWidget {
   final String deviceName;
@@ -71,6 +190,51 @@ class _DeviceGraphPageState extends State<DeviceGraphPage> {
   List<ChartData> ammoniaData = [];
   List<ChartData> temperaturedata = [];
   List<ChartData> humiditydata = [];
+  List<ChartData> rfdData = [];
+  List<ChartData> rfsData = [];
+  List<ChartData> ittempData = [];
+  List<ChartData> itpressureData = [];
+  List<ChartData> ithumidityData = [];
+  List<ChartData> itradiationData = [];
+  List<ChartData> itwindspeedData = [];
+  List<ChartData> itvisibilityData = [];
+  List<ChartData> itrainData = [];
+  List<ChartData> itwinddirectionData = [];
+  List<ChartData> fstempData = [];
+  List<ChartData> fspressureData = [];
+  List<ChartData> fshumidityData = [];
+  List<ChartData> fsradiationData = [];
+  List<ChartData> fswindspeedData = [];
+  List<ChartData> smwindspeedData = [];
+  List<ChartData> smWindDirectionData = [];
+  List<ChartData> smAtmPressureData = [];
+  List<ChartData> smLightIntensityData = [];
+  List<ChartData> smRainfallWeeklyData = [];
+  List<ChartData> smMaximumTemperatureData = [];
+  List<ChartData> smRainfallDailyData = [];
+  List<ChartData> smAverageHumidityData = [];
+  List<ChartData> smBatteryVoltageData = [];
+  List<ChartData> smAverageTemperatureData = [];
+  List<ChartData> smMaximumHumidityData = [];
+  List<ChartData> smMinimumTemperatureData = [];
+  List<ChartData> smMinimumHumidityData = [];
+  List<ChartData> smCurrentHumidityData = [];
+  List<ChartData> smRainfallHourlyData = [];
+  List<ChartData> smIMEINumberData = [];
+  List<ChartData> smRainfallMinutlyData = [];
+  List<ChartData> smCurrentTemperatureData = [];
+  List<ChartData> smSignalStrength = [];
+  Map<String, List<ChartData>> smParametersData = {};
+  Map<String, List<ChartData>> cfParametersData = {};
+  Map<String, List<ChartData>> svParametersData = {};
+  List<ChartData> cod2Data = [];
+  List<ChartData> bod2Data = [];
+  List<ChartData> temp2Data = [];
+  final DateFormat formatter = DateFormat('dd-MM-yyyy HH:mm:ss');
+
+  List<ChartData> fsrainData = [];
+  List<ChartData> fswinddirectionData = [];
+  Timer? _reloadTimer;
 
   final FlutterLocalNotificationsPlugin flutterLocalNotificationsPlugin =
       FlutterLocalNotificationsPlugin();
@@ -90,11 +254,29 @@ class _DeviceGraphPageState extends State<DeviceGraphPage> {
   bool _isHovering = false;
   String? _activeButton;
   String _currentChlorineValue = '0.00';
+  String _currentrfdValue = '0.00';
   String _currentAmmoniaValue = '0.00';
   bool _isLoading = false;
   String _lastSelectedRange = 'single'; // Default to single
   bool isWindDirectionValid(String? windDirection) {
     return windDirection != null && windDirection != "-";
+  }
+
+  bool iswinddirectionValid(String? direction) {
+    print('Validating wind direction: $direction');
+    if (direction == null || direction.isEmpty) {
+      print('Wind direction invalid: null or empty');
+      return false;
+    }
+    try {
+      double value = double.parse(direction);
+      bool isValid = value >= 0 && value <= 360;
+      print('Wind direction parsed: $value, isValid: $isValid');
+      return isValid;
+    } catch (e) {
+      print('Wind direction invalid: parse error - $e');
+      return false;
+    }
   }
 
   // New variables to store rain forecasting data for WD 211
@@ -118,12 +300,22 @@ class _DeviceGraphPageState extends State<DeviceGraphPage> {
     super.initState();
     requestPermissions();
     _fetchDeviceDetails();
-
     _fetchDataForRange('single');
-
     _focusNode = FocusNode();
-    // Initialize notifications
     _initializeNotifications();
+
+    // Set up the periodic timer to reload data every 30 seconds
+    _reloadTimer = Timer.periodic(Duration(seconds: 120), (timer) {
+      _reloadData();
+    });
+  }
+
+  @override
+  void dispose() {
+    // Cancel the timer to prevent memory leaks
+    _reloadTimer?.cancel();
+    _focusNode.dispose();
+    super.dispose();
   }
 
   Future<void> requestPermissions() async {
@@ -194,7 +386,13 @@ class _DeviceGraphPageState extends State<DeviceGraphPage> {
 
   List<List<dynamic>> _csvRows = [];
   String _lastWindDirection = "";
+  String _lastwinddirection = "";
+  // String _lastfswinddirection = "";
   String _lastBatteryPercentage = "";
+  double _lastfsBattery = 0.0;
+  double _lastsmBattery = 0.0;
+  double _lastcfBattery = 0.0;
+  double _lastsvBattery = 0.0;
   String _lastRSSI_Value = "";
 
   Future<void> _fetchDataForRange(String range,
@@ -232,8 +430,33 @@ class _DeviceGraphPageState extends State<DeviceGraphPage> {
       humData.clear();
       luxData.clear();
       ammoniaData.clear();
-      temperaturedata.clear;
-      humiditydata.clear;
+      temperaturedata.clear();
+      humiditydata.clear();
+      ittempData.clear();
+      itpressureData.clear();
+      ithumidityData.clear();
+      itradiationData.clear();
+      itvisibilityData.clear();
+      itrainData.clear();
+      itwinddirectionData.clear();
+      itwindspeedData.clear();
+      fshumidityData.clear();
+      fspressureData.clear();
+      fsradiationData.clear();
+      fsrainData.clear();
+      fstempData.clear();
+      fswinddirectionData.clear();
+      _lastfsBattery = 0.0;
+      _lastsmBattery = 0.0;
+      _lastcfBattery = 0.0;
+      _lastsvBattery = 0.0;
+
+      fswindspeedData.clear();
+
+      smParametersData.clear();
+      cfParametersData.clear();
+      svParametersData.clear();
+
       _weeklyPrecipitationData.clear();
     });
     DateTime startDate;
@@ -266,8 +489,16 @@ class _DeviceGraphPageState extends State<DeviceGraphPage> {
 
     _lastSelectedRange = range; // Store the currently selected range
 
-    final startdate = _formatDate(startDate);
-    final enddate = _formatDate(endDate);
+    // Format dates for most APIs (DD-MM-YYYY)
+    final dateFormatter = DateFormat('dd-MM-yyyy');
+    final startdate = dateFormatter.format(startDate);
+    final enddate = dateFormatter.format(endDate);
+
+    // Format dates for SM sensor API (YYYYMMDD)
+    final smDateFormatter = DateFormat('yyyyMMdd');
+    final smStartDate = smDateFormatter.format(startDate);
+    final smEndDate = smDateFormatter.format(endDate);
+
     final DateFormat formatter = DateFormat('dd-MM-yyyy HH:mm:ss');
     int deviceId =
         int.parse(widget.deviceName.replaceAll(RegExp(r'[^0-9]'), ''));
@@ -284,19 +515,38 @@ class _DeviceGraphPageState extends State<DeviceGraphPage> {
     }
 
     String apiUrl;
-    if (widget.deviceName.startsWith('WD')) {
+    if (widget.deviceName.startsWith('SM')) {
+      apiUrl =
+          'https://n42fiw7l89.execute-api.us-east-1.amazonaws.com/default/SSMet_API_Func?device_id=$deviceId&start_date=$smStartDate&end_date=$smEndDate';
+    } else if (widget.deviceName.startsWith('CF')) {
+      apiUrl =
+          'https://gtk47vexob.execute-api.us-east-1.amazonaws.com/colonelfarmdata?deviceid=$deviceId&startdate=$startdate&enddate=$enddate';
+    } else if (widget.deviceName.startsWith('SV')) {
+      apiUrl =
+          'https://gtk47vexob.execute-api.us-east-1.amazonaws.com/svpudata?deviceid=$deviceId&startdate=$startdate&enddate=$enddate';
+    } else if (widget.deviceName.startsWith('WD')) {
       apiUrl =
           'https://62f4ihe2lf.execute-api.us-east-1.amazonaws.com/CloudSense_Weather_data_api_function?DeviceId=$deviceId&startdate=$startdate&enddate=$enddate';
     } else if (widget.deviceName.startsWith('CL') ||
         (widget.deviceName.startsWith('BD'))) {
       apiUrl =
           'https://b0e4z6nczh.execute-api.us-east-1.amazonaws.com/CloudSense_Chloritrone_api_function?deviceid=$deviceId&startdate=$startdate&enddate=$enddate';
+      print(startdate);
     } else if (widget.deviceName.startsWith('WQ')) {
       apiUrl =
           'https://oy7qhc1me7.execute-api.us-west-2.amazonaws.com/default/k_wqm_api?deviceid=${widget.deviceName}&startdate=$startdate&enddate=$enddate';
+    } else if (widget.deviceName.startsWith('IT')) {
+      apiUrl =
+          'https://7a3bcew3y2.execute-api.us-east-1.amazonaws.com/default/IIT_Bombay_API_func?deviceid=$deviceId&startdate=$startdate&enddate=$enddate';
     } else if (widget.deviceName.startsWith('WS')) {
       apiUrl =
           'https://xjbnnqcup4.execute-api.us-east-1.amazonaws.com/default/CloudSense_Water_quality_api_function?deviceid=$deviceId&startdate=$startdate&enddate=$enddate';
+    } else if (widget.deviceName.startsWith('CB')) {
+      apiUrl =
+          'https://a9z5vrfpkd.execute-api.us-east-1.amazonaws.com/default/CloudSense_BOD_COD_Api_func?deviceid=$deviceId&startdate=$startdate&enddate=$enddate';
+    } else if (widget.deviceName.startsWith('FS')) {
+      apiUrl =
+          'https://w7w21t8s23.execute-api.us-east-1.amazonaws.com/default/SSMet_Forest_API_func?deviceid=$deviceId&startdate=$startdate&enddate=$enddate';
     } else if (widget.deviceName.startsWith('DO')) {
       apiUrl =
           'https://br2s08as9f.execute-api.us-east-1.amazonaws.com/default/CloudSense_Water_quality_api_2_function?deviceid=$deviceId&startdate=$startdate&enddate=$enddate';
@@ -311,8 +561,27 @@ class _DeviceGraphPageState extends State<DeviceGraphPage> {
         widget.deviceName.startsWith('AC')) {
       apiUrl =
           'https://2bftil5o0c.execute-api.us-east-1.amazonaws.com/default/CloudSense_sensor_api_function?DeviceId=$deviceId&startdate=$startdate&enddate=$enddate';
+    } else if (widget.deviceName.startsWith('20')) {
+      apiUrl =
+          'https://gzdsa7h08k.execute-api.us-east-1.amazonaws.com/default/lat_long_api_func?deviceId=$deviceId';
+      print("Device ID: $deviceId");
+
+      try {
+        final response = await http.get(Uri.parse(apiUrl));
+
+        if (response.statusCode == 200) {
+          print("API Response: ${response.body}");
+          // Optional: Parse JSON if needed
+          // final jsonData = json.decode(response.body);
+          // print("Parsed JSON: $jsonData");
+        } else {
+          print("Failed to fetch data. Status Code: ${response.statusCode}");
+        }
+      } catch (e) {
+        print("Error during API call: $e");
+      }
     } else {
-      setState(() {});
+      setState(() {}); // Not sure if needed here
       setState(() {
         _isLoading = false;
       });
@@ -327,8 +596,173 @@ class _DeviceGraphPageState extends State<DeviceGraphPage> {
 
         List<List<dynamic>> rows = [];
         String lastWindDirection = 'Unknown';
+        String lastwinddirection;
         String lastBatteryPercentage = 'Unknown';
         String lastRSSI_Value = 'Unknown';
+
+        if (widget.deviceName.startsWith('SM')) {
+          print('SM API Response: ${response.body}');
+          setState(() {
+            smParametersData.clear();
+            smParametersData = _parseSMParametersData(data);
+            print('Parsed SM Parameters: $smParametersData');
+
+            if (smParametersData.isEmpty) {
+              print('No valid SM parameters found');
+              _csvRows = [
+                ['Timestamp', 'Message'],
+                ['', 'No data available']
+              ];
+            } else {
+              List<String> headers = ['Timestamp'];
+              headers.addAll(smParametersData.keys);
+
+              List<List<dynamic>> dataRows = [];
+              int maxLength = smParametersData.values
+                  .map((list) => list.length)
+                  .reduce((a, b) => a > b ? a : b);
+
+              for (int i = 0; i < maxLength; i++) {
+                List<dynamic> row = [
+                  smParametersData.values.isNotEmpty &&
+                          smParametersData.values.first.length > i
+                      ? formatter
+                          .format(smParametersData.values.first[i].timestamp)
+                      : ''
+                ];
+                for (var key in smParametersData.keys) {
+                  var value = smParametersData[key]!.length > i
+                      ? smParametersData[key]![i].value
+                      : null;
+                  // ✅ Preserve 0, replace null with empty string
+                  row.add(value ?? '');
+                }
+                dataRows.add(row);
+              }
+
+              _csvRows = [headers, ...dataRows];
+              print('✅ CSV Rows Prepared: ${_csvRows.length} rows');
+              print('✅ Sample Row: ${_csvRows[1]}');
+            }
+
+            // Clear unrelated data
+            temperatureData = [];
+            humidityData = [];
+            // etc...
+          });
+
+          // // ✅ Now trigger download
+          // downloadCSV(context);
+          await _fetchDeviceDetails();
+        } else if (widget.deviceName.startsWith('CF')) {
+          print('CF API Response: ${response.body}');
+          setState(() {
+            cfParametersData.clear();
+            cfParametersData = _parseCFParametersData(data);
+            print('Parsed CF Parameters: $cfParametersData');
+
+            if (cfParametersData.isEmpty) {
+              print('No valid CF parameters found');
+              _csvRows = [
+                ['Timestamp', 'Message'],
+                ['', 'No data available']
+              ];
+            } else {
+              List<String> headers = ['Timestamp'];
+              headers.addAll(cfParametersData.keys);
+
+              List<List<dynamic>> dataRows = [];
+              int maxLength = cfParametersData.values
+                  .map((list) => list.length)
+                  .reduce((a, b) => a > b ? a : b);
+
+              for (int i = 0; i < maxLength; i++) {
+                List<dynamic> row = [
+                  cfParametersData.values.isNotEmpty &&
+                          cfParametersData.values.first.length > i
+                      ? formatter
+                          .format(cfParametersData.values.first[i].timestamp)
+                      : ''
+                ];
+                for (var key in cfParametersData.keys) {
+                  var value = cfParametersData[key]!.length > i
+                      ? cfParametersData[key]![i].value
+                      : null;
+                  // ✅ Preserve 0, replace null with empty string
+                  row.add(value ?? '');
+                }
+                dataRows.add(row);
+              }
+
+              _csvRows = [headers, ...dataRows];
+              print('✅ CSV Rows Prepared: ${_csvRows.length} rows');
+              print('✅ Sample Row: ${_csvRows[1]}');
+            }
+
+            // Clear unrelated data
+            temperatureData = [];
+            humidityData = [];
+            // etc...
+          });
+
+          // // ✅ Now trigger download
+          // downloadCSV(context);
+          await _fetchDeviceDetails();
+        } else if (widget.deviceName.startsWith('SV')) {
+          print('SV API Response: ${response.body}');
+          setState(() {
+            svParametersData.clear();
+            svParametersData = _parseSVParametersData(data);
+            print('Parsed SV Parameters: $svParametersData');
+
+            if (svParametersData.isEmpty) {
+              print('No valid SV parameters found');
+              _csvRows = [
+                ['Timestamp', 'Message'],
+                ['', 'No data available']
+              ];
+            } else {
+              List<String> headers = ['Timestamp'];
+              headers.addAll(svParametersData.keys);
+
+              List<List<dynamic>> dataRows = [];
+              int maxLength = svParametersData.values
+                  .map((list) => list.length)
+                  .reduce((a, b) => a > b ? a : b);
+
+              for (int i = 0; i < maxLength; i++) {
+                List<dynamic> row = [
+                  svParametersData.values.isNotEmpty &&
+                          svParametersData.values.first.length > i
+                      ? formatter
+                          .format(svParametersData.values.first[i].timestamp)
+                      : ''
+                ];
+                for (var key in svParametersData.keys) {
+                  var value = svParametersData[key]!.length > i
+                      ? svParametersData[key]![i].value
+                      : null;
+                  // ✅ Preserve 0, replace null with empty string
+                  row.add(value ?? '');
+                }
+                dataRows.add(row);
+              }
+
+              _csvRows = [headers, ...dataRows];
+              print('✅ CSV Rows Prepared: ${_csvRows.length} rows');
+              print('✅ Sample Row: ${_csvRows[1]}');
+            }
+
+            // Clear unrelated data
+            temperatureData = [];
+            humidityData = [];
+            // etc...
+          });
+
+          // // ✅ Now trigger download
+          // downloadCSV(context);
+          await _fetchDeviceDetails();
+        }
 
         if (widget.deviceName.startsWith('CL') ||
             widget.deviceName.startsWith('BD')) {
@@ -405,14 +839,43 @@ class _DeviceGraphPageState extends State<DeviceGraphPage> {
             ];
           });
           await _fetchDeviceDetails();
-        } else if (widget.deviceName.startsWith('WS')) {
+        } else if (widget.deviceName.startsWith('CB')) {
           setState(() {
-            temppData = _parsewaterChartData(data, 'Temperature');
-            electrodeSignalData =
-                _parsewaterChartData(data, 'Electrode_signal');
-            residualchlorineData = _parsewaterChartData(data, 'Chlorine_value');
-            hypochlorousData = _parsewaterChartData(data, 'Hypochlorous_value');
+            print('Items in response: ${data['items']}');
+            temp2Data = _parseCBChartData(data, 'temperature');
 
+            cod2Data = _parseCBChartData(data, 'COD');
+            bod2Data = _parseCBChartData(data, 'BOD');
+
+            rows = [
+              [
+                "Timestamp",
+                "temperature",
+                "COD",
+                "BOD",
+              ],
+              for (int i = 0; i < temp2Data.length; i++)
+                [
+                  formatter.format(temp2Data[i].timestamp),
+                  temp2Data[i].value,
+                  cod2Data[i].value,
+                  bod2Data[i].value,
+                ]
+            ];
+          });
+          await _fetchDeviceDetails();
+        } else if (widget.deviceName.startsWith('IT')) {
+          setState(() {
+            print('Processing IT device data');
+            print('Items in response: ${data['items']}');
+            ittempData = _parseITChartData(data, 'temperature');
+            itpressureData = _parseITChartData(data, 'pressure');
+            ithumidityData = _parseITChartData(data, 'humidity');
+            itradiationData = _parseITChartData(data, 'radiation');
+            itrainData = _parseITChartData(data, 'rain_level');
+            itvisibilityData = _parseITChartData(data, 'visibility');
+            itwinddirectionData = _parseITChartData(data, 'wind_direction');
+            itwindspeedData = _parseITChartData(data, 'wind_speed');
             temperatureData = [];
             humidityData = [];
             lightIntensityData = [];
@@ -420,6 +883,63 @@ class _DeviceGraphPageState extends State<DeviceGraphPage> {
             rainLevelData = [];
             solarIrradianceData = [];
             chlorineData = [];
+
+            // Assign _lastWindDirection from the latest item
+            if (data.containsKey('items') &&
+                data['items'] is List &&
+                data['items'].isNotEmpty) {
+              var lastItem = data['items'].last;
+              print('Last item: $lastItem');
+              print(
+                  'wind_direction in last item: ${lastItem['wind_direction']}');
+              _lastwinddirection =
+                  lastItem['wind_direction']?.toString() ?? '0';
+              print('Assigned _lastWindDirection: $_lastwinddirection');
+            } else {
+              _lastwinddirection = '0';
+              print('No valid items in data, setting _lastWindDirection to 0');
+            }
+            rows = [
+              [
+                "Timestamp",
+                "Temperature",
+                "Pressure ",
+                "Humidity",
+                "Radiation",
+                "Visibility",
+                "Wind Direction",
+                "Wind Speed"
+              ],
+              for (int i = 0; i < ittempData.length; i++)
+                [
+                  formatter.format(ittempData[i].timestamp),
+                  ittempData[i].value,
+                  itpressureData[i].value,
+                  ithumidityData[i].value,
+                  itradiationData[i].value,
+                  itvisibilityData[i].value,
+                  itwinddirectionData[i].value,
+                  itwindspeedData[i].value,
+                ]
+            ];
+          });
+          await _fetchDeviceDetails();
+        } else if (widget.deviceName.startsWith('WS')) {
+          setState(() {
+            print('Items in response: ${data['items']}');
+            temppData = _parsewaterChartData(data, 'Temperature');
+            electrodeSignalData =
+                _parsewaterChartData(data, 'Electrode_signal');
+            residualchlorineData = _parsewaterChartData(data, 'Chlorine_value');
+            hypochlorousData = _parsewaterChartData(data, 'Hypochlorous_value');
+
+            // temperatureData = [];
+            // humidityData = [];
+            // lightIntensityData = [];
+            // windSpeedData = [];
+            // rainLevelData = [];
+            // solarIrradianceData = [];
+            // chlorineData = [];
 
             rows = [
               [
@@ -566,14 +1086,14 @@ class _DeviceGraphPageState extends State<DeviceGraphPage> {
             // }
 // Update ammonia value and check threshold
             // Check if ammonia value exceeds 25 ppm and trigger notification
-            if (ammoniaData.isNotEmpty) {
-              double currentAmmoniaValue = ammoniaData.last.value;
-              if (currentAmmoniaValue > 0) {
-                // Trigger the notification when ammonia level exceeds 25 ppm
-                PushNotifications()
-                    .sendAmmoniaAlertNotification(currentAmmoniaValue);
-              }
-            }
+            // if (ammoniaData.isNotEmpty) {
+            //   double currentAmmoniaValue = ammoniaData.last.value;
+            //   if (currentAmmoniaValue > 0) {
+            //     // Trigger the notification when ammonia level exceeds 25 ppm
+            //     PushNotifications()
+            //         .sendAmmoniaAlertNotification(currentAmmoniaValue);
+            //   }
+            // }
 
             rows = [
               [
@@ -673,7 +1193,71 @@ class _DeviceGraphPageState extends State<DeviceGraphPage> {
             ];
           });
           await _fetchDeviceDetails();
-        } else {
+        } else if (widget.deviceName.startsWith('FS')) {
+          setState(() {
+            fstempData = _parsefsChartData(data, 'temperature');
+            fspressureData = _parsefsChartData(data, 'pressure');
+            fshumidityData = _parsefsChartData(data, 'humidity');
+            fsradiationData = _parsefsChartData(data, 'radiation');
+            fsrainData = _parsefsChartData(data, 'rain_level');
+            fswinddirectionData = _parsefsChartData(data, 'wind_direction');
+            fswindspeedData = _parsefsChartData(data, 'wind_speed');
+
+            // //Extract the last wind direction from the data
+            // if (data['weather_items'].isNotEmpty) {
+            //   lastWindDirection = data['weather_items'].last['WindDirection'];
+            //   lastBatteryPercentage =
+            //       data['weather_items'].last['BatteryPercentage'];
+            // }
+            // Assign _lastWindDirection from the latest item
+            if (data.containsKey('items') &&
+                data['items'] is List &&
+                data['items'].isNotEmpty) {
+              var lastItem = data['items'].last;
+
+              print('Last item: $lastItem');
+              print('Last item keys: ${lastItem.keys}');
+
+              // _lastfswinddirection =
+              //     lastItem['wind_direction']?.toString() ?? '0';
+
+              var batteryVoltage = lastItem['battery_voltage'];
+              if (batteryVoltage != null) {
+                _lastfsBattery =
+                    double.tryParse(batteryVoltage.toString()) ?? 0.0;
+                print('Battery Voltage: $_lastfsBattery V');
+              } else {
+                _lastfsBattery = 0;
+                print('No battery_voltage found, defaulting to 0.0');
+              }
+            }
+
+            // Prepare data for CSV
+            rows = [
+              [
+                "Timestamp",
+                "Temperature",
+                "Pressure ",
+                "relative Humidity",
+                "Radiation",
+                "Wind Speed",
+                "Wind Direction",
+              ],
+              for (int i = 0; i < fstempData.length; i++)
+                [
+                  formatter.format(fstempData[i].timestamp),
+                  fstempData[i].value,
+                  fspressureData[i].value,
+                  fshumidityData[i].value,
+                  fsradiationData[i].value,
+                  fswindspeedData[i].value,
+                  fswinddirectionData[i].value,
+                ]
+            ];
+          });
+          // Fetch device details specifically for Weather data
+          await _fetchDeviceDetails();
+        } else if (widget.deviceName.startsWith('WD')) {
           setState(() {
             temperatureData = _parseChartData(data, 'Temperature');
             humidityData = _parseChartData(data, 'Humidity');
@@ -719,15 +1303,65 @@ class _DeviceGraphPageState extends State<DeviceGraphPage> {
           });
           // Fetch device details specifically for Weather data
           await _fetchDeviceDetails();
+        } else {
+          setState(() {
+            rfdData = _parserainChartData(data, 'RFD');
+            rfsData = _parserainChartData(data, 'RFS');
+
+            temperatureData = [];
+            humidityData = [];
+            lightIntensityData = [];
+            windSpeedData = [];
+            rainLevelData = [];
+            solarIrradianceData = [];
+            chlorineData = [];
+            tempData = [];
+            tdsData = [];
+            codData = [];
+            bodData = [];
+            pHData = [];
+            doData = [];
+            ecData = [];
+            temmppData = [];
+            humidityyData = [];
+            lightIntensityData = [];
+            windSpeeddData = [];
+
+            // Update current chlorine value
+            if (rfdData.isNotEmpty) {
+              _currentrfdValue = rfdData.last.value.toStringAsFixed(2);
+            }
+
+            // rows = [
+            //   [
+            //     "Timestamp",
+            //     "RFD ",
+            //     "RFS ",
+            //   ],
+            //   for (int i = 0; i < rfdData.length; i++)
+            //     [
+            //       formatter.format(rfdData[i].timestamp),
+            //       rfdData[i].value,
+            //       rfsData[i].value,
+            //     ]
+            // ];
+          });
+          await _fetchDeviceDetails();
         }
 
         // Store CSV rows for download later
         setState(() {
-          _csvRows = rows;
+          // Only set _csvRows for sensors other than SM and CF
+          if (!widget.deviceName.startsWith('SM') &&
+              !widget.deviceName.startsWith('CF') &&
+              !widget.deviceName.startsWith('SV')) {
+            _csvRows = rows;
+          }
           _lastWindDirection =
               lastWindDirection; // Store the last wind direction
           _lastBatteryPercentage = lastBatteryPercentage;
           _lastRSSI_Value = lastRSSI_Value;
+          // _lastwinddirection = lastwinddirection;
 
           if (_csvRows.isEmpty) {
           } else {}
@@ -743,21 +1377,153 @@ class _DeviceGraphPageState extends State<DeviceGraphPage> {
   }
 
   void downloadCSV(BuildContext context, {DateTimeRange? range}) async {
-    if (_csvRows.isEmpty) {
-      ScaffoldMessenger.of(context).showSnackBar(
-        SnackBar(content: Text("No data available for download.")),
-      );
-      return;
+    List<List<dynamic>> csvRows;
+
+    if (widget.deviceName.startsWith('SM')) {
+      if (smParametersData.isEmpty) {
+        csvRows = [
+          ['Timestamp', 'Message'],
+          ['', 'No data available']
+        ];
+      } else {
+        List<String> headers = ['Timestamp'];
+        headers.addAll(smParametersData.keys);
+
+        List<List<dynamic>> dataRows = [];
+        Set<DateTime> timestamps = {};
+        smParametersData.values.forEach((dataList) {
+          dataList.forEach((data) => timestamps.add(data.timestamp));
+        });
+        List<DateTime> sortedTimestamps = timestamps.toList()..sort();
+        print('Sorted Timestamps for SM CSV Download: $sortedTimestamps');
+
+        for (var timestamp in sortedTimestamps) {
+          List<dynamic> row = [formatter.format(timestamp)];
+          for (var key in smParametersData.keys) {
+            var dataList = smParametersData[key]!;
+            var matchingData = dataList.firstWhere(
+              (data) => data.timestamp == timestamp,
+              orElse: () => ChartData(timestamp: timestamp, value: 0.0),
+            );
+            row.add(matchingData.value ?? '');
+          }
+          dataRows.add(row);
+        }
+
+        csvRows = [headers, ...dataRows];
+        print('✅ CSV Rows for SM Download: ${csvRows.length} rows');
+        print('✅ Sample Row for SM Download: ${csvRows[1]}');
+      }
+    } else if (widget.deviceName.startsWith('CF')) {
+      if (cfParametersData.isEmpty) {
+        csvRows = [
+          ['Timestamp', 'Message'],
+          ['', 'No data available']
+        ];
+      } else {
+        List<String> headers = ['Timestamp'];
+        headers.addAll(cfParametersData.keys);
+
+        List<List<dynamic>> dataRows = [];
+        Set<DateTime> timestamps = {};
+        cfParametersData.values.forEach((dataList) {
+          dataList.forEach((data) => timestamps.add(data.timestamp));
+        });
+        List<DateTime> sortedTimestamps = timestamps.toList()..sort();
+        print('Sorted Timestamps for CF CSV Download: $sortedTimestamps');
+
+        for (var timestamp in sortedTimestamps) {
+          List<dynamic> row = [formatter.format(timestamp)];
+          for (var key in cfParametersData.keys) {
+            var dataList = cfParametersData[key]!;
+            var matchingData = dataList.firstWhere(
+              (data) => data.timestamp == timestamp,
+              orElse: () => ChartData(timestamp: timestamp, value: 0.0),
+            );
+            row.add(matchingData.value ?? '');
+          }
+          dataRows.add(row);
+        }
+
+        csvRows = [headers, ...dataRows];
+        print('✅ CSV Rows for CF Download: ${csvRows.length} rows');
+        print('✅ Sample Row for CF Download: ${csvRows[1]}');
+      }
+    } else if (widget.deviceName.startsWith('SV')) {
+      if (svParametersData.isEmpty) {
+        csvRows = [
+          ['Timestamp', 'Message'],
+          ['', 'No data available']
+        ];
+      } else {
+        List<String> headers = ['Timestamp'];
+        headers.addAll(svParametersData.keys);
+
+        List<List<dynamic>> dataRows = [];
+        Set<DateTime> timestamps = {};
+        svParametersData.values.forEach((dataList) {
+          dataList.forEach((data) => timestamps.add(data.timestamp));
+        });
+        List<DateTime> sortedTimestamps = timestamps.toList()..sort();
+        print('Sorted Timestamps for SV CSV Download: $sortedTimestamps');
+
+        for (var timestamp in sortedTimestamps) {
+          List<dynamic> row = [formatter.format(timestamp)];
+          for (var key in svParametersData.keys) {
+            var dataList = svParametersData[key]!;
+            var matchingData = dataList.firstWhere(
+              (data) => data.timestamp == timestamp,
+              orElse: () => ChartData(timestamp: timestamp, value: 0.0),
+            );
+            row.add(matchingData.value ?? '');
+          }
+          dataRows.add(row);
+        }
+
+        csvRows = [headers, ...dataRows];
+        print('✅ CSV Rows for SV Download: ${csvRows.length} rows');
+        print('✅ Sample Row for SV Download: ${csvRows[1]}');
+      }
+    } else if (widget.deviceName.startsWith('WD211') ||
+        widget.deviceName.startsWith('WD511')) {
+      if (rfdData.isEmpty || rfsData.isEmpty) {
+        csvRows = [
+          ['Timestamp', 'Message'],
+          ['', 'No data available']
+        ];
+      } else {
+        csvRows = [
+          ["Timestamp", "RFD ", "RFS "],
+          for (int i = 0; i < rfdData.length; i++)
+            [
+              formatter.format(rfdData[i].timestamp),
+              rfdData[i].value,
+              rfsData[i].value,
+            ]
+        ];
+        print('✅ CSV Rows for Rain Forecast Download: ${csvRows.length} rows');
+        print('✅ Sample Row for Rain Forecast Download: ${csvRows[1]}');
+      }
+    } else {
+      // Use _csvRows for other sensors (CL, BD, WQ, IT, WS, DO, TH, NH, TE, LU, FS, WD, etc.)
+      if (_csvRows.isEmpty) {
+        ScaffoldMessenger.of(context).showSnackBar(
+          SnackBar(content: Text("No data available for download.")),
+        );
+        return;
+      }
+      csvRows = _csvRows;
+      print('Using _csvRows for Download: ${csvRows.length} rows');
     }
 
-    String csvData = const ListToCsvConverter().convert(_csvRows);
-    String fileName = _generateFileName(); // Generate a dynamic filename
+    String csvData = const ListToCsvConverter().convert(csvRows);
+    String fileName = _generateFileName();
 
     if (kIsWeb) {
       final blob = html.Blob([csvData], 'text/csv');
       final url = html.Url.createObjectUrlFromBlob(blob);
       final anchor = html.AnchorElement(href: url)
-        ..setAttribute("download", fileName) // Use the generated filename
+        ..setAttribute("download", fileName)
         ..click();
       html.Url.revokeObjectUrl(url);
 
@@ -769,8 +1535,7 @@ class _DeviceGraphPageState extends State<DeviceGraphPage> {
       );
     } else {
       try {
-        // Use Storage Access Framework for non-web platforms
-        await saveCSVFile(csvData, fileName); // Pass filename to saveCSVFile
+        await saveCSVFile(csvData, fileName);
       } catch (e) {
         ScaffoldMessenger.of(context).showSnackBar(
           SnackBar(content: Text("Error downloading: $e")),
@@ -952,17 +1717,232 @@ class _DeviceGraphPageState extends State<DeviceGraphPage> {
 
   List<ChartData> _parsewaterChartData(Map<String, dynamic> data, String type) {
     final List<dynamic> items = data['items'] ?? [];
+    final result = items.map((item) {
+      if (item == null) {
+        return ChartData(timestamp: DateTime.now(), value: 0.0);
+      }
+      String valueStr = item[type]?.toString().split(' ')[0] ?? '0.0';
+      double value = double.tryParse(valueStr) ?? 0.0;
+      DateTime timestamp = _parsewaterDate(item['HumanTime']);
+      print('Parsed $type: timestamp=$timestamp, value=$value');
+      return ChartData(
+        timestamp: timestamp,
+        value: value,
+      );
+    }).toList();
+    print('Parsed $type data: $result');
+    return result;
+  }
+
+  List<ChartData> _parseITChartData(Map<String, dynamic> data, String type) {
+    final List<dynamic> items = data['items'] ?? [];
     return items.map((item) {
       if (item == null) {
         return ChartData(timestamp: DateTime.now(), value: 0.0);
       }
       return ChartData(
-        timestamp: _parsewaterDate(item['HumanTime']),
+        timestamp: _parseITDate(item['human_time']),
         value: item[type] != null
             ? double.tryParse(item[type].toString()) ?? 0.0
             : 0.0,
       );
     }).toList();
+  }
+
+  List<ChartData> _parsefsChartData(Map<String, dynamic> data, String type) {
+    final List<dynamic> items = data['items'] ?? [];
+    return items.map((item) {
+      if (item == null) {
+        return ChartData(timestamp: DateTime.now(), value: 0.0);
+      }
+      return ChartData(
+        timestamp: _parsefsDate(item['timestamp']),
+        value: item[type] != null
+            ? double.tryParse(item[type].toString()) ?? 0.0
+            : 0.0,
+      );
+    }).toList();
+  }
+
+  Map<String, List<ChartData>> _parseSMParametersData(
+      Map<String, dynamic> data) {
+    final List<dynamic> items = data['items'] ?? [];
+    Map<String, List<ChartData>> parametersData = {};
+    print('SM API Items Count: ${items.length}'); // Debug
+
+    if (items.isEmpty) {
+      print('No items in SM API response');
+      return parametersData;
+    }
+
+    // Collect all possible parameter keys from the first item, excluding non-numeric fields
+    final sampleItem = items.first;
+    final parameterKeys = sampleItem.keys.where((key) {
+      // Exclude non-numeric fields like TimeStamp, TimeStampFormatted, Topic, IMEINumber, DeviceId
+      return ![
+        'TimeStamp',
+        'TimeStampFormatted',
+        'Topic',
+        'IMEINumber',
+        'DeviceId'
+      ].contains(key);
+    }).toList();
+
+    // Initialize ChartData lists for each parameter
+    for (var key in parameterKeys) {
+      parametersData[key] = [];
+    }
+
+    // Parse data for each item
+    for (var item in items) {
+      if (item == null) continue;
+      DateTime timestamp = _parseSMDate(item['TimeStamp']);
+      for (var key in parameterKeys) {
+        if (item[key] != null) {
+          // Only include non-null values
+          double value = double.tryParse(item[key].toString()) ?? 0.0;
+          parametersData[key]!
+              .add(ChartData(timestamp: timestamp, value: value));
+        }
+      }
+    }
+    // Update _lastsmBattery with the latest BatteryVoltage (from the last item)
+    for (var item in items.reversed) {
+      if (item != null && item['BatteryVoltage'] != null) {
+        _lastsmBattery =
+            double.tryParse(item['BatteryVoltage'].toString()) ?? 0.0;
+        print('Updated _lastsmBattery: $_lastsmBattery V'); // Debug
+        break; // Exit after finding the latest non-null value
+      }
+    }
+
+    // Remove parameters with empty lists (i.e., all values were null)
+    parametersData.removeWhere((key, value) => value.isEmpty);
+    print('Parsed SM Parameters: ${parametersData.keys.join(', ')}'); // Debug
+
+    return parametersData;
+  }
+
+  Map<String, List<ChartData>> _parseCFParametersData(
+      Map<String, dynamic> data) {
+    final List<dynamic> items = data['items'] ?? [];
+    Map<String, List<ChartData>> parametersData = {};
+    print('CF API Items Count: ${items.length}'); // Debug
+
+    if (items.isEmpty) {
+      print('No items in CF API response');
+      return parametersData;
+    }
+
+    // Collect all possible parameter keys from the first item, excluding non-numeric fields
+    final sampleItem = items.first;
+    final parameterKeys = sampleItem.keys.where((key) {
+      // Exclude non-numeric fields like TimeStamp, Topic, IMEINumber, DeviceId, Latitude, Longitude
+      return ![
+        'TimeStamp',
+        'Topic',
+        'IMEINumber',
+        'DeviceId',
+        'Latitude',
+        'Longitude'
+      ].contains(key);
+    }).toList();
+
+    // Initialize ChartData lists for each parameter
+    for (var key in parameterKeys) {
+      parametersData[key] = [];
+    }
+
+    // Parse data for each item
+    for (var item in items) {
+      if (item == null) continue;
+      DateTime timestamp = _parseCFDate(item['TimeStamp']);
+      for (var key in parameterKeys) {
+        if (item[key] != null) {
+          // Only include non-null values
+          double value = double.tryParse(item[key].toString()) ?? 0.0;
+          parametersData[key]!
+              .add(ChartData(timestamp: timestamp, value: value));
+        }
+      }
+    }
+
+    // Update _lastcfBattery with the latest BatteryVoltage (from the last item)
+    for (var item in items.reversed) {
+      if (item != null && item['BatteryVoltage'] != null) {
+        _lastcfBattery =
+            double.tryParse(item['BatteryVoltage'].toString()) ?? 0.0;
+        print('Updated _lastcfBattery: $_lastcfBattery V'); // Debug
+        break; // Exit after finding the latest non-null value
+      }
+    }
+
+    // Remove parameters with empty lists (i.e., all values were null)
+    parametersData.removeWhere((key, value) => value.isEmpty);
+    print('Parsed CF Parameters: ${parametersData.keys.join(', ')}'); // Debug
+
+    return parametersData;
+  }
+
+  Map<String, List<ChartData>> _parseSVParametersData(
+      Map<String, dynamic> data) {
+    final List<dynamic> items = data['items'] ?? [];
+    Map<String, List<ChartData>> parametersData = {};
+    print('SV API Items Count: ${items.length}'); // Debug
+
+    if (items.isEmpty) {
+      print('No items in SV API response');
+      return parametersData;
+    }
+
+    // Collect all possible parameter keys from the first item, excluding non-numeric fields
+    final sampleItem = items.first;
+    final parameterKeys = sampleItem.keys.where((key) {
+      // Exclude non-numeric fields like TimeStamp, Topic, IMEINumber, DeviceId, Latitude, Longitude
+      return ![
+        'TimeStamp',
+        'Topic',
+        'IMEINumber',
+        'DeviceId',
+        'Latitude',
+        'Longitude'
+      ].contains(key);
+    }).toList();
+
+    // Initialize ChartData lists for each parameter
+    for (var key in parameterKeys) {
+      parametersData[key] = [];
+    }
+
+    // Parse data for each item
+    for (var item in items) {
+      if (item == null) continue;
+      DateTime timestamp = _parseSVDate(item['TimeStamp']);
+      for (var key in parameterKeys) {
+        if (item[key] != null) {
+          // Only include non-null values
+          double value = double.tryParse(item[key].toString()) ?? 0.0;
+          parametersData[key]!
+              .add(ChartData(timestamp: timestamp, value: value));
+        }
+      }
+    }
+
+    // Update _lastsvBattery with the latest BatteryVoltage (from the last item)
+    for (var item in items.reversed) {
+      if (item != null && item['BatteryVoltage'] != null) {
+        _lastsvBattery =
+            double.tryParse(item['BatteryVoltage'].toString()) ?? 0.0;
+        print('Updated _lastsvBattery: $_lastsvBattery V'); // Debug
+        break; // Exit after finding the latest non-null value
+      }
+    }
+
+    // Remove parameters with empty lists (i.e., all values were null)
+    parametersData.removeWhere((key, value) => value.isEmpty);
+    print('Parsed SV Parameters: ${parametersData.keys.join(', ')}'); // Debug
+
+    return parametersData;
   }
 
   List<ChartData> _parsesensorChartData(
@@ -1050,6 +2030,36 @@ class _DeviceGraphPageState extends State<DeviceGraphPage> {
       }
       return ChartData(
         timestamp: _parseWaterDate(item['time_stamp']),
+        value: item[type] != null
+            ? double.tryParse(item[type].toString()) ?? 0.0
+            : 0.0,
+      );
+    }).toList();
+  }
+
+  List<ChartData> _parseCBChartData(Map<String, dynamic> data, String type) {
+    final List<dynamic> items = data['items'] ?? [];
+    return items.map((item) {
+      if (item == null) {
+        return ChartData(timestamp: DateTime.now(), value: 0.0);
+      }
+      return ChartData(
+        timestamp: _parseCBDate(item['human_time']),
+        value: item[type] != null
+            ? double.tryParse(item[type].toString()) ?? 0.0
+            : 0.0,
+      );
+    }).toList();
+  }
+
+  List<ChartData> _parserainChartData(Map<String, dynamic> data, String type) {
+    final List<dynamic> items = data['items'] ?? [];
+    return items.map((item) {
+      if (item == null) {
+        return ChartData(timestamp: DateTime.now(), value: 0.0);
+      }
+      return ChartData(
+        timestamp: _parserainDate(item['human_time']),
         value: item[type] != null
             ? double.tryParse(item[type].toString()) ?? 0.0
             : 0.0,
@@ -1173,6 +2183,133 @@ class _DeviceGraphPageState extends State<DeviceGraphPage> {
   }
 
   DataRow buildDataRow(
+      String parameter, Map<String, List<double?>> stats, double fontSize) {
+    return DataRow(cells: [
+      DataCell(Text(parameter,
+          style: TextStyle(fontSize: fontSize, color: Colors.white))),
+      DataCell(Text(
+          stats['current']?[0] != null
+              ? stats['current']![0]!.toStringAsFixed(2)
+              : '-',
+          style: TextStyle(fontSize: fontSize, color: Colors.white))),
+      DataCell(Text(
+          stats['min']?[0] != null ? stats['min']![0]!.toStringAsFixed(2) : '-',
+          style: TextStyle(fontSize: fontSize, color: Colors.white))),
+      DataCell(Text(
+          stats['max']?[0] != null ? stats['max']![0]!.toStringAsFixed(2) : '-',
+          style: TextStyle(fontSize: fontSize, color: Colors.white))),
+    ]);
+  }
+
+// Calculate average, min, and max values
+  Map<String, List<double?>> _calculateCBStatistics(List<ChartData> data) {
+    if (data.isEmpty) {
+      return {
+        // 'average': [null],
+        'current': [null],
+        'min': [null],
+        'max': [null],
+      };
+    }
+    // double sum = 0.0;
+    double? current = data.last.value;
+    double min = double.infinity;
+    double max = double.negativeInfinity;
+
+    for (var entry in data) {
+      if (entry.value < min) min = entry.value;
+      if (entry.value > max) max = entry.value;
+    }
+
+    return {
+      'current': [current],
+      'min': [min],
+      'max': [max],
+    };
+  }
+
+  // Create a table displaying statistics
+  Widget buildCBStatisticsTable() {
+    final temp2Stats = _calculateCBStatistics(temp2Data);
+
+    final cod2Stats = _calculateCBStatistics(cod2Data);
+    final bod2Stats = _calculateCBStatistics(bod2Data);
+
+    double screenWidth = MediaQuery.of(context).size.width;
+    double fontSize = screenWidth < 800 ? 13 : 16;
+    double headerFontSize = screenWidth < 800 ? 16 : 22;
+
+    return Padding(
+      padding: const EdgeInsets.all(16.0),
+      child: Container(
+        decoration: BoxDecoration(
+          border: Border.all(color: Colors.white, width: 1),
+          borderRadius: BorderRadius.circular(16),
+          color: Colors.black.withOpacity(0.6),
+        ),
+        margin: EdgeInsets.all(10),
+        padding: EdgeInsets.all(8),
+        width: screenWidth < 800 ? double.infinity : 500,
+        child: SingleChildScrollView(
+          scrollDirection: Axis.horizontal,
+          child: ConstrainedBox(
+            constraints: BoxConstraints(
+              minWidth: screenWidth < 800 ? screenWidth - 32 : 500,
+            ),
+            child: DataTable(
+              horizontalMargin: 16,
+              columnSpacing: 16,
+              columns: [
+                DataColumn(
+                  label: Text(
+                    'Parameter',
+                    style: TextStyle(
+                        fontSize: headerFontSize,
+                        fontWeight: FontWeight.bold,
+                        color: Colors.blue),
+                  ),
+                ),
+                DataColumn(
+                  label: Text(
+                    'Current',
+                    style: TextStyle(
+                        fontSize: headerFontSize,
+                        fontWeight: FontWeight.bold,
+                        color: Colors.blue),
+                  ),
+                ),
+                DataColumn(
+                  label: Text(
+                    'Min',
+                    style: TextStyle(
+                        fontSize: headerFontSize,
+                        fontWeight: FontWeight.bold,
+                        color: Colors.blue),
+                  ),
+                ),
+                DataColumn(
+                  label: Text(
+                    'Max',
+                    style: TextStyle(
+                        fontSize: headerFontSize,
+                        fontWeight: FontWeight.bold,
+                        color: Colors.blue),
+                  ),
+                ),
+              ],
+              rows: [
+                buildCBDataRow('Temp', temp2Stats, fontSize),
+                buildCBDataRow('COD', cod2Stats, fontSize),
+                buildCBDataRow('BOD', bod2Stats, fontSize),
+              ],
+            ),
+          ),
+        ),
+      ),
+    );
+  }
+
+  DataRow buildCBDataRow(
       String parameter, Map<String, List<double?>> stats, double fontSize) {
     return DataRow(cells: [
       DataCell(Text(parameter,
@@ -1673,6 +2810,292 @@ class _DeviceGraphPageState extends State<DeviceGraphPage> {
     ]);
   }
 
+  // Calculate average, min, and max values
+  Map<String, List<double?>> _calculateITStatistics(List<ChartData> data) {
+    if (data.isEmpty) {
+      return {
+        // 'average': [null],
+        'current': [null],
+        'min': [null],
+        'max': [null],
+      };
+    }
+    // double sum = 0.0;
+    double? current = data.last.value;
+    double min = double.infinity;
+    double max = double.negativeInfinity;
+
+    for (var entry in data) {
+      if (entry.value < min) min = entry.value;
+      if (entry.value > max) max = entry.value;
+    }
+
+    return {
+      'current': [current],
+      'min': [min],
+      'max': [max],
+    };
+  }
+
+  // Create a table displaying statistics
+  Widget buildITStatisticsTable() {
+    final ittempStats = _calculateITStatistics(ittempData);
+    final itpressureStats = _calculateITStatistics(itpressureData);
+    final ithumStats = _calculateITStatistics(ithumidityData);
+    final itrainStats = _calculateITStatistics(itrainData);
+    final itradiationStats = _calculateITStatistics(itradiationData);
+    final itvisibilityStats = _calculateITStatistics(itvisibilityData);
+    final itwindspeedStats = _calculateITStatistics(itwindspeedData);
+
+    double screenWidth = MediaQuery.of(context).size.width;
+    double fontSize = screenWidth < 800 ? 13 : 16;
+    double headerFontSize = screenWidth < 800 ? 16 : 22;
+
+    return Padding(
+      padding: const EdgeInsets.all(16.0),
+      child: Container(
+        decoration: BoxDecoration(
+          border: Border.all(color: Colors.white, width: 1),
+          borderRadius: BorderRadius.circular(16),
+          color: Colors.black.withOpacity(0.6),
+        ),
+        margin: EdgeInsets.all(10),
+        padding: EdgeInsets.all(8),
+        width: screenWidth < 800 ? double.infinity : 500,
+        child: SingleChildScrollView(
+          scrollDirection: Axis.horizontal,
+          child: ConstrainedBox(
+            constraints: BoxConstraints(
+              minWidth: screenWidth < 800 ? screenWidth - 32 : 500,
+            ),
+            child: DataTable(
+              horizontalMargin: 16,
+              columnSpacing: 16,
+              columns: [
+                DataColumn(
+                  label: Text(
+                    'Parameter',
+                    style: TextStyle(
+                        fontSize: headerFontSize,
+                        fontWeight: FontWeight.bold,
+                        color: Colors.blue),
+                  ),
+                ),
+                DataColumn(
+                  label: Text(
+                    'Current',
+                    style: TextStyle(
+                        fontSize: headerFontSize,
+                        fontWeight: FontWeight.bold,
+                        color: Colors.blue),
+                  ),
+                ),
+                DataColumn(
+                  label: Text(
+                    'Min',
+                    style: TextStyle(
+                        fontSize: headerFontSize,
+                        fontWeight: FontWeight.bold,
+                        color: Colors.blue),
+                  ),
+                ),
+                DataColumn(
+                  label: Text(
+                    'Max',
+                    style: TextStyle(
+                        fontSize: headerFontSize,
+                        fontWeight: FontWeight.bold,
+                        color: Colors.blue),
+                  ),
+                ),
+              ],
+              rows: [
+                buildDataRow('TEMP', ittempStats, fontSize),
+                buildDataRow('PRESSURE', itpressureStats, fontSize),
+                buildDataRow('HUMIDITY', ithumStats, fontSize),
+                buildDataRow('RAIN', itrainStats, fontSize),
+                buildDataRow('RADIATION', itradiationStats, fontSize),
+                buildDataRow('VISIBILITY', itvisibilityStats, fontSize),
+                buildDataRow('WIND SPEED', itwindspeedStats, fontSize),
+              ],
+            ),
+          ),
+        ),
+      ),
+    );
+  }
+
+  DataRow buildITDataRow(
+      String parameter, Map<String, List<double?>> stats, double fontSize) {
+    return DataRow(cells: [
+      DataCell(Text(parameter,
+          style: TextStyle(fontSize: fontSize, color: Colors.white))),
+      DataCell(Text(
+          stats['current']?[0] != null
+              ? stats['current']![0]!.toStringAsFixed(2)
+              : '-',
+          style: TextStyle(fontSize: fontSize, color: Colors.white))),
+      DataCell(Text(
+          stats['min']?[0] != null ? stats['min']![0]!.toStringAsFixed(2) : '-',
+          style: TextStyle(fontSize: fontSize, color: Colors.white))),
+      DataCell(Text(
+          stats['max']?[0] != null ? stats['max']![0]!.toStringAsFixed(2) : '-',
+          style: TextStyle(fontSize: fontSize, color: Colors.white))),
+    ]);
+  }
+
+  // Calculate average, min, and max values
+  Map<String, List<double?>> _calculatefsStatistics(List<ChartData> data) {
+    if (data.isEmpty) {
+      return {
+        'average': [null],
+        'current': [null],
+        'min': [null],
+        'max': [null],
+      };
+    }
+    double sum = 0.0;
+    double? current = data.last.value;
+    double min = double.infinity;
+    double max = double.negativeInfinity;
+
+    for (var entry in data) {
+      sum += entry.value;
+      if (entry.value < min) min = entry.value;
+      if (entry.value > max) max = entry.value;
+    }
+    double avg = sum / data.length;
+    return {
+      'average': [avg],
+      'current': [current],
+      'min': [min],
+      'max': [max],
+    };
+  }
+
+  // Create a table displaying statistics
+  Widget buildfsStatisticsTable() {
+    final fstempStats = _calculatefsStatistics(fstempData);
+    final fspressureStats = _calculatefsStatistics(fspressureData);
+    final fshumStats = _calculatefsStatistics(fshumidityData);
+    final fsrainStats = _calculatefsStatistics(fsrainData);
+    final fsradiationStats = _calculatefsStatistics(fsradiationData);
+
+    final fswindspeedStats = _calculatefsStatistics(fswindspeedData);
+    final fswinddirectionStats = _calculatefsStatistics(fswinddirectionData);
+
+    double screenWidth = MediaQuery.of(context).size.width;
+    double fontSize = screenWidth < 800 ? 13 : 27;
+    double headerFontSize = screenWidth < 800 ? 16 : 33;
+
+    return Padding(
+      padding: const EdgeInsets.all(16.0),
+      child: Container(
+        decoration: BoxDecoration(
+          border: Border.all(color: Colors.white, width: 1),
+          borderRadius: BorderRadius.circular(16),
+          color: Colors.black.withOpacity(0.6),
+        ),
+        margin: EdgeInsets.all(16),
+        padding: EdgeInsets.all(8),
+        width: screenWidth < 800 ? double.infinity : 900,
+        child: SingleChildScrollView(
+          scrollDirection: Axis.horizontal,
+          child: ConstrainedBox(
+            constraints: BoxConstraints(
+              minWidth: screenWidth < 800 ? screenWidth - 32 : 900,
+            ),
+            child: DataTable(
+              horizontalMargin: 20,
+              columnSpacing: 25,
+              columns: [
+                DataColumn(
+                  label: Text(
+                    'Parameter',
+                    style: TextStyle(
+                        fontSize: headerFontSize,
+                        fontWeight: FontWeight.bold,
+                        color: Colors.blue),
+                  ),
+                ),
+                DataColumn(
+                  label: Text(
+                    'Current',
+                    style: TextStyle(
+                        fontSize: headerFontSize,
+                        fontWeight: FontWeight.bold,
+                        color: Colors.blue),
+                  ),
+                ),
+                DataColumn(
+                  label: Text(
+                    'Min',
+                    style: TextStyle(
+                        fontSize: headerFontSize,
+                        fontWeight: FontWeight.bold,
+                        color: Colors.blue),
+                  ),
+                ),
+                DataColumn(
+                  label: Text(
+                    'Max',
+                    style: TextStyle(
+                        fontSize: headerFontSize,
+                        fontWeight: FontWeight.bold,
+                        color: Colors.blue),
+                  ),
+                ),
+                // DataColumn(
+                //   label: Text(
+                //     'Avg',
+                //     style: TextStyle(
+                //         fontSize: headerFontSize,
+                //         fontWeight: FontWeight.bold,
+                //         color: Colors.blue),
+                //   ),
+                // ),
+              ],
+              rows: [
+                buildfsDataRow('TEMPERATURE (°C)', fstempStats, fontSize),
+                buildfsDataRow('PRESSURE (hPa)', fspressureStats, fontSize),
+                buildfsDataRow('RELATIVE HUMIDITY (%)', fshumStats, fontSize),
+                buildfsDataRow('RAIN LEVEL (mm)', fsrainStats, fontSize),
+                buildfsDataRow('RADIATION (W/m²)', fsradiationStats, fontSize),
+                buildfsDataRow('WIND SPEED (m/s)', fswindspeedStats, fontSize),
+                buildfsDataRow(
+                    'WIND DIRECTION (°)', fswinddirectionStats, fontSize),
+              ],
+            ),
+          ),
+        ),
+      ),
+    );
+  }
+
+  DataRow buildfsDataRow(
+      String parameter, Map<String, List<double?>> stats, double fontSize) {
+    return DataRow(cells: [
+      DataCell(Text(parameter,
+          style: TextStyle(fontSize: fontSize, color: Colors.white))),
+      DataCell(Text(
+          stats['current']?[0] != null
+              ? stats['current']![0]!.toStringAsFixed(2)
+              : '-',
+          style: TextStyle(fontSize: fontSize, color: Colors.white))),
+      DataCell(Text(
+          stats['min']?[0] != null ? stats['min']![0]!.toStringAsFixed(2) : '-',
+          style: TextStyle(fontSize: fontSize, color: Colors.white))),
+      DataCell(Text(
+          stats['max']?[0] != null ? stats['max']![0]!.toStringAsFixed(2) : '-',
+          style: TextStyle(fontSize: fontSize, color: Colors.white))),
+      // DataCell(Text(
+      //     stats['average']?[0] != null
+      //         ? stats['average']![0]!.toStringAsFixed(2)
+      //         : '-',
+      //     style: TextStyle(fontSize: fontSize, color: Colors.white))),
+    ]);
+  }
+
   DateTime _parseBDDate(String dateString) {
     final dateFormat = DateFormat(
         'yyyy-MM-dd hh:mm a'); // Ensure this matches your date format
@@ -1712,6 +3135,76 @@ class _DeviceGraphPageState extends State<DeviceGraphPage> {
     }
   }
 
+  DateTime _parseCBDate(String dateString) {
+    final dateFormat = DateFormat(
+        'dd-MM-yyyy HH:mm:ss'); // Ensure this matches your date format
+    try {
+      return dateFormat.parse(dateString);
+    } catch (e) {
+      return DateTime.now(); // Provide a default date-time if parsing fails
+    }
+  }
+
+  DateTime _parseITDate(String dateString) {
+    final dateFormat = DateFormat(
+        'dd-MM-yyyy HH:mm:ss'); // Ensure this matches your date format
+    try {
+      return dateFormat.parse(dateString);
+    } catch (e) {
+      return DateTime.now(); // Provide a default date-time if parsing fails
+    }
+  }
+
+  DateTime _parsefsDate(String dateString) {
+    final dateFormat = DateFormat(
+        'dd-MM-yyyy HH:mm:ss'); // Ensure this matches your date format
+    try {
+      return dateFormat.parse(dateString);
+    } catch (e) {
+      return DateTime.now(); // Provide a default date-time if parsing fails
+    }
+  }
+
+  DateTime _parseSMDate(String? dateStr) {
+    if (dateStr == null || dateStr.isEmpty) {
+      return DateTime.now();
+    }
+    try {
+      // Parse the timestamp format: YYYYMMDDTHHMMSS (e.g., 20250614T162130)
+      return DateTime.parse(
+          dateStr.replaceFirst('T', ' ')); // Convert to YYYYMMDD HHMMSS
+    } catch (e) {
+      print('Error parsing SM date: $e');
+      return DateTime.now();
+    }
+  }
+
+  DateTime _parseCFDate(String? dateStr) {
+    if (dateStr == null || dateStr.isEmpty) {
+      return DateTime.now();
+    }
+    try {
+      // Parse the timestamp format: YYYY-MM-DD HH:MM:SS (e.g., 2025-06-15 01:01:02)
+      return DateTime.parse(dateStr);
+    } catch (e) {
+      print('Error parsing CF date: $e');
+      return DateTime.now();
+    }
+  }
+
+  DateTime _parseSVDate(String? dateStr) {
+    if (dateStr == null || dateStr.isEmpty) {
+      return DateTime.now();
+    }
+    try {
+      // Parse the timestamp format: YYYY-MM-DD HH:MM:SS (e.g., 2025-06-15 01:01:02)
+      return DateTime.parse(dateStr);
+    } catch (e) {
+      print('Error parsing SV date: $e');
+      return DateTime.now();
+    }
+  }
+
   DateTime _parsedoDate(String dateString) {
     final dateFormat = DateFormat(
         'yyyy-MM-dd HH:mm:ss'); // Ensure this matches your date format
@@ -1723,6 +3216,16 @@ class _DeviceGraphPageState extends State<DeviceGraphPage> {
   }
 
   DateTime _parseammoniaDate(String dateString) {
+    final dateFormat = DateFormat(
+        'dd-MM-yyyy HH:mm:ss'); // Ensure this matches your date format
+    try {
+      return dateFormat.parse(dateString);
+    } catch (e) {
+      return DateTime.now(); // Provide a default date-time if parsing fails
+    }
+  }
+
+  DateTime _parserainDate(String dateString) {
     final dateFormat = DateFormat(
         'dd-MM-yyyy HH:mm:ss'); // Ensure this matches your date format
     try {
@@ -1757,12 +3260,12 @@ class _DeviceGraphPageState extends State<DeviceGraphPage> {
   }
 
   DateTime _parsewaterDate(String dateString) {
-    final dateFormat = DateFormat(
-        'yyyy-MM-dd hh:MM:ss'); // Ensure this matches your date format
+    final dateFormat = DateFormat('yyyy-MM-dd HH:mm:ss');
     try {
       return dateFormat.parse(dateString);
     } catch (e) {
-      return DateTime.now(); // Provide a default date-time if parsing fails
+      print('Error parsing date $dateString: $e');
+      return DateTime.now();
     }
   }
 
@@ -1828,6 +3331,204 @@ class _DeviceGraphPageState extends State<DeviceGraphPage> {
     });
   }
 
+  // Updated _buildWindCompass
+  Widget _buildWindCompass(String? winddirection) {
+    print('Building wind compass with windDirection: "$winddirection"');
+
+    // Convert wind direction to double, default to 0 if invalid
+    double angle = 0;
+    try {
+      angle = double.parse(winddirection ?? '0');
+      print('Parsed wind direction angle: $angle degrees');
+    } catch (e) {
+      print('Error parsing wind direction: $e');
+      angle = 0;
+    }
+
+    // Convert degrees to radians for rotation
+    final angleRad = angle * math.pi / 180;
+    print('Angle in radians: $angleRad');
+
+    return Column(
+      children: [
+        Container(
+          width: 150,
+          height: 150,
+          child: Stack(
+            alignment: Alignment.center,
+            children: [
+              // Compass background with ticks
+              CustomPaint(
+                painter: CompassBackgroundPainter(),
+                child: Container(width: 150, height: 150),
+              ),
+              // Compass cardinal directions (N, NE, E, SE, S, SW, W, NW)
+              Positioned(
+                top: 10,
+                child: Text(
+                  'N',
+                  style: TextStyle(
+                    color: Colors.white,
+                    fontSize: 16,
+                    fontWeight: FontWeight.bold,
+                  ),
+                ),
+              ),
+              Positioned(
+                top: 20,
+                right: 20,
+                child: Text(
+                  'NE',
+                  style: TextStyle(
+                    color: Colors.white70,
+                    fontSize: 14,
+                    fontWeight: FontWeight.bold,
+                  ),
+                ),
+              ),
+              Positioned(
+                right: 10,
+                child: Text(
+                  'E',
+                  style: TextStyle(
+                    color: Colors.white,
+                    fontSize: 16,
+                    fontWeight: FontWeight.bold,
+                  ),
+                ),
+              ),
+              Positioned(
+                bottom: 20,
+                right: 20,
+                child: Text(
+                  'SE',
+                  style: TextStyle(
+                    color: Colors.white70,
+                    fontSize: 14,
+                    fontWeight: FontWeight.bold,
+                  ),
+                ),
+              ),
+              Positioned(
+                bottom: 10,
+                child: Text(
+                  'S',
+                  style: TextStyle(
+                    color: Colors.white,
+                    fontSize: 16,
+                    fontWeight: FontWeight.bold,
+                  ),
+                ),
+              ),
+              Positioned(
+                bottom: 20,
+                left: 20,
+                child: Text(
+                  'SW',
+                  style: TextStyle(
+                    color: Colors.white70,
+                    fontSize: 14,
+                    fontWeight: FontWeight.bold,
+                  ),
+                ),
+              ),
+              Positioned(
+                left: 10,
+                child: Text(
+                  'W',
+                  style: TextStyle(
+                    color: Colors.white,
+                    fontSize: 16,
+                    fontWeight: FontWeight.bold,
+                  ),
+                ),
+              ),
+              Positioned(
+                top: 20,
+                left: 20,
+                child: Text(
+                  'NW',
+                  style: TextStyle(
+                    color: Colors.white70,
+                    fontSize: 14,
+                    fontWeight: FontWeight.bold,
+                  ),
+                ),
+              ),
+              // Rotated needle for wind direction
+              Transform.rotate(
+                angle: angleRad,
+                child: CustomPaint(
+                  painter: CompassNeedlePainter(), // No angle parameter
+                  child: Container(width: 150, height: 150),
+                ),
+              ),
+            ],
+          ),
+        ),
+        SizedBox(height: 8),
+        Text(
+          'Wind Direction: ${winddirection ?? 'N/A'}°',
+          style: TextStyle(
+            fontWeight: FontWeight.bold,
+            fontSize: 16,
+            color: Colors.white,
+          ),
+        ),
+      ],
+    );
+  }
+
+// Helper function to map parameter keys to display names and units
+  Map<String, dynamic> _getParameterDisplayInfo(String paramName) {
+    String displayName = paramName
+        .replaceAllMapped(RegExp(r'([A-Z])'), (match) => ' ${match[1]}')
+        .trim();
+    String unit = '';
+
+    if (paramName.contains('Rainfall'))
+      unit = 'mm';
+    else if (paramName.contains('Voltage'))
+      unit = 'V';
+    else if (paramName.contains('SignalStrength'))
+      unit = 'dBm';
+    else if (paramName.contains('Latitude') || paramName.contains('Longitude'))
+      unit = 'deg';
+    else if (paramName.contains('Temperature'))
+      unit = '°C';
+    else if (paramName.contains('Humidity'))
+      unit = '%';
+    else if (paramName.contains('Pressure'))
+      unit = 'hPa';
+    else if (paramName.contains('LightIntensity'))
+      unit = 'Lux';
+    else if (paramName.contains('WindSpeed'))
+      unit = 'm/s';
+    else if (paramName.contains('WindDirection'))
+      unit = 'degrees'; // Added for CF WindDirection
+    else if (paramName.contains('Irradiance') ||
+        paramName.contains('Radiation'))
+      unit = 'W/m²';
+    else if (paramName.contains('Chlorine') ||
+        paramName.contains('COD') ||
+        paramName.contains('BOD') ||
+        paramName.contains('DO'))
+      unit = 'mg/L';
+    else if (paramName.contains('TDS'))
+      unit = 'ppm';
+    else if (paramName.contains('EC'))
+      unit = 'mS/cm';
+    else if (paramName.contains('pH'))
+      unit = '';
+    else if (paramName.contains('Ammonia'))
+      unit = 'PPM';
+    else if (paramName.contains('Visibility'))
+      unit = 'm';
+    else if (paramName.contains('ElectrodeSignal')) unit = 'mV';
+
+    return {'displayName': displayName, 'unit': unit};
+  }
+
   @override
   Widget build(BuildContext context) {
     // Determine the background image based on the device type
@@ -1844,9 +3545,12 @@ class _DeviceGraphPageState extends State<DeviceGraphPage> {
       backgroundImagePath = 'assets/tree.jpg';
     } else if (widget.deviceName.startsWith('TH')) {
       backgroundImagePath = 'assets/tree.jpg';
+    } else if (widget.deviceName.startsWith('WQ') ||
+        (widget.deviceName.startsWith('WS'))) {
+      backgroundImagePath = 'assets/water_quality.jpg';
     } else {
       // For water quality sensor
-      backgroundImagePath = 'assets/water_quality.jpg';
+      backgroundImagePath = 'assets/tree.jpg';
     }
     String _selectedRange = 'ee';
     // : 'assets/soil.jpg';
@@ -1887,7 +3591,7 @@ class _DeviceGraphPageState extends State<DeviceGraphPage> {
                   text: widget.sequentialName, // Main title
                   style: TextStyle(
                     color: Colors.white,
-                    fontSize: MediaQuery.of(context).size.width < 800 ? 16 : 32,
+                    fontSize: MediaQuery.of(context).size.width < 800 ? 14 : 32,
                     fontWeight: FontWeight.bold,
                   ),
                   children: [
@@ -1895,7 +3599,7 @@ class _DeviceGraphPageState extends State<DeviceGraphPage> {
                       text: " (${widget.deviceName})", // Device ID in brackets
                       style: TextStyle(
                         fontSize: MediaQuery.of(context).size.width < 800
-                            ? 16
+                            ? 14
                             : 30, // Smaller font
                         fontWeight: FontWeight.bold,
                         color: Colors.white70, // Slightly dim color
@@ -1913,22 +3617,20 @@ class _DeviceGraphPageState extends State<DeviceGraphPage> {
               actions: [
                 if (widget.deviceName.startsWith('WD'))
                   Padding(
-                    padding: const EdgeInsets.only(
-                        right: 0.0), // Adjust padding as needed
+                    padding: const EdgeInsets.only(right: 8.0),
                     child: Row(
-                      mainAxisSize: MainAxisSize
-                          .min, // Ensure Row uses only required space
+                      mainAxisSize: MainAxisSize.min,
                       children: [
                         Icon(
-                          _getBatteryIcon(_parseBatteryPercentage(
-                              _lastBatteryPercentage)), // Convert to int before passing
+                          _getBatteryIcon(
+                            _parseBatteryPercentage(_lastBatteryPercentage),
+                          ),
                           size: 26,
                           color: Colors.white,
-                          // color: _getBatteryIconColor(_parseBatteryPercentage(
-                          //     _lastBatteryPercentage)), // Change color based on percentage
                         ),
+                        SizedBox(width: 4),
                         Text(
-                          ': $_lastBatteryPercentage', // Battery percentage
+                          ': $_lastBatteryPercentage',
                           style: TextStyle(
                             fontSize: 16,
                             fontWeight: FontWeight.bold,
@@ -1938,13 +3640,124 @@ class _DeviceGraphPageState extends State<DeviceGraphPage> {
                       ],
                     ),
                   ),
+                if (widget.deviceName.startsWith('FS'))
+                  Padding(
+                    padding: const EdgeInsets.only(right: 8.0),
+                    child: Row(
+                      crossAxisAlignment: CrossAxisAlignment.center,
+                      children: [
+                        Column(
+                          mainAxisSize: MainAxisSize.min,
+                          children: [
+                            Icon(
+                              _getfsBatteryIcon(_lastfsBattery),
+                              color: _getBatteryColor(_lastfsBattery),
+                              size: 28,
+                            ),
+                            SizedBox(height: 2),
+                            Text(
+                              '${_lastfsBattery.toStringAsFixed(2)} V',
+                              style: TextStyle(
+                                fontSize: 14,
+                                color: Colors.white,
+                                fontWeight: FontWeight.w500,
+                              ),
+                            ),
+                          ],
+                        ),
+                      ],
+                    ),
+                  ),
+                if (widget.deviceName.startsWith('SM'))
+                  Padding(
+                    padding: const EdgeInsets.only(right: 8.0),
+                    child: Row(
+                      crossAxisAlignment: CrossAxisAlignment.center,
+                      children: [
+                        Column(
+                          mainAxisSize: MainAxisSize.min,
+                          children: [
+                            Icon(
+                              _getfsBatteryIcon(_lastsmBattery),
+                              color: _getBatteryColor(_lastsmBattery),
+                              size: 28,
+                            ),
+                            SizedBox(height: 2),
+                            Text(
+                              '${_lastsmBattery.toStringAsFixed(2)} V',
+                              style: TextStyle(
+                                fontSize: 14,
+                                color: Colors.white,
+                                fontWeight: FontWeight.w500,
+                              ),
+                            ),
+                          ],
+                        ),
+                      ],
+                    ),
+                  ),
+                if (widget.deviceName.startsWith('CF'))
+                  Padding(
+                    padding: const EdgeInsets.only(right: 8.0),
+                    child: Row(
+                      crossAxisAlignment: CrossAxisAlignment.center,
+                      children: [
+                        Column(
+                          mainAxisSize: MainAxisSize.min,
+                          children: [
+                            Icon(
+                              _getfsBatteryIcon(_lastcfBattery),
+                              color: _getBatteryColor(_lastcfBattery),
+                              size: 28,
+                            ),
+                            SizedBox(height: 2),
+                            Text(
+                              '${_lastcfBattery.toStringAsFixed(2)} V',
+                              style: TextStyle(
+                                fontSize: 14,
+                                color: Colors.white,
+                                fontWeight: FontWeight.w500,
+                              ),
+                            ),
+                          ],
+                        ),
+                      ],
+                    ),
+                  ),
+                if (widget.deviceName.startsWith('SV'))
+                  Padding(
+                    padding: const EdgeInsets.only(right: 8.0),
+                    child: Row(
+                      crossAxisAlignment: CrossAxisAlignment.center,
+                      children: [
+                        Column(
+                          mainAxisSize: MainAxisSize.min,
+                          children: [
+                            Icon(
+                              _getfsBatteryIcon(_lastsvBattery),
+                              color: _getBatteryColor(_lastsvBattery),
+                              size: 28,
+                            ),
+                            SizedBox(height: 2),
+                            Text(
+                              '${_lastsvBattery.toStringAsFixed(2)} V',
+                              style: TextStyle(
+                                fontSize: 14,
+                                color: Colors.white,
+                                fontWeight: FontWeight.w500,
+                              ),
+                            ),
+                          ],
+                        ),
+                      ],
+                    ),
+                  ),
                 Padding(
-                  padding: const EdgeInsets.only(
-                      right: 0.0), // Adjust padding as needed
+                  padding: const EdgeInsets.only(right: 12.0),
                   child: IconButton(
                     icon: Icon(Icons.refresh, color: Colors.white, size: 26),
                     onPressed: () {
-                      _reloadData(); // Function to reload data
+                      _reloadData();
                     },
                   ),
                 ),
@@ -2357,15 +4170,78 @@ class _DeviceGraphPageState extends State<DeviceGraphPage> {
                           // if (widget.deviceName.startsWith('NH'))
                           //   _buildCurrentValue(
                           //       'Ammonia Value', _currentAmmoniaValue, 'PPM'),
+                          if (widget.deviceName.startsWith('20'))
+                            _buildCurrentValue(
+                                'Rain Level ', _currentrfdValue, 'mm'),
+
+                          // Add compass for IT devices with debugging
+                          () {
+                            print(
+                                'Checking compass display conditions for device: ${widget.deviceName}');
+                            print(
+                                'Device starts with IT: ${widget.deviceName.startsWith('IT')}');
+                            print(
+                                'Wind direction valid: ${isWindDirectionValid(_lastwinddirection)}');
+                            print(
+                                'Wind direction not null: ${_lastwinddirection != null}');
+                            print(
+                                'Wind direction not empty: ${_lastwinddirection?.isNotEmpty ?? false}');
+
+                            if (widget.deviceName.startsWith('IT') &&
+                                iswinddirectionValid(_lastwinddirection) &&
+                                _lastwinddirection != null &&
+                                _lastwinddirection.isNotEmpty) {
+                              print('All conditions met, displaying compass');
+                              return _buildWindCompass(_lastwinddirection);
+                            } else {
+                              print(
+                                  'Compass not displayed due to failed conditions');
+                              return SizedBox
+                                  .shrink(); // Return empty widget if conditions fail
+                            }
+                          }(),
+
+                          // // Add compass for FS devices with debugging
+                          // () {
+                          //   print(
+                          //       'Checking compass display conditions for device: ${widget.deviceName}');
+                          //   print(
+                          //       'Device starts with FS: ${widget.deviceName.startsWith('FS')}');
+                          //   print(
+                          //       'Wind direction valid: ${isWindDirectionValid(_lastfswinddirection)}');
+                          //   print(
+                          //       'Wind direction not null: ${_lastfswinddirection != null}');
+                          //   print(
+                          //       'Wind direction not empty: ${_lastfswinddirection?.isNotEmpty ?? false}');
+
+                          //   if (widget.deviceName.startsWith('FS') &&
+                          //       iswinddirectionValid(_lastfswinddirection) &&
+                          //       _lastfswinddirection != null &&
+                          //       _lastfswinddirection.isNotEmpty) {
+                          //     print('All conditions met, displaying compass');
+                          //     return _buildWindCompass(_lastfswinddirection);
+                          //   } else {
+                          //     print(
+                          //         'Compass not displayed due to failed conditions');
+                          //     return SizedBox
+                          //         .shrink(); // Return empty widget if conditions fail
+                          //   }
+                          // }(),
                         ],
                       ),
                     ),
                     if (widget.deviceName.startsWith('WQ'))
                       buildStatisticsTable(),
+                    if (widget.deviceName.startsWith('CB'))
+                      buildCBStatisticsTable(),
                     if (widget.deviceName.startsWith('NH'))
                       buildNHStatisticsTable(),
                     if (widget.deviceName.startsWith('DO'))
                       buildDOStatisticsTable(),
+                    if (widget.deviceName.startsWith('IT'))
+                      buildITStatisticsTable(),
+                    if (widget.deviceName.startsWith('FS'))
+                      buildfsStatisticsTable(),
                     if (widget.deviceName.startsWith('WD211') ||
                         (widget.deviceName.startsWith('WD511')))
                       SingleChildScrollView(
@@ -2405,126 +4281,354 @@ class _DeviceGraphPageState extends State<DeviceGraphPage> {
                       ),
                     Column(
                       children: [
-                        if (hasNonZeroValues(chlorineData))
-                          _buildChartContainer('Chlorine', chlorineData,
-                              'Chlorine (mg/L)', ChartType.line),
-                        if (hasNonZeroValues(temperatureData))
-                          _buildChartContainer('Temperature', temperatureData,
-                              'Temperature (°C)', ChartType.line),
-                        if (hasNonZeroValues(humidityData))
-                          _buildChartContainer('Humidity', humidityData,
-                              'Humidity (%)', ChartType.line),
-                        if (hasNonZeroValues(lightIntensityData))
+                        // SM sensor parameters (dynamic)
+                        if (widget.deviceName.startsWith('SM'))
+                          ...smParametersData.entries.map((entry) {
+                            String paramName = entry.key;
+                            List<ChartData> data = entry.value;
+
+                            // Exclude specified Parameters
+                            List<String> excludedParams = [
+                              'Longitude',
+                              'Latitude',
+                              'SignalStrength',
+                              'BatteryVoltage',
+                            ];
+
+                            if (!excludedParams.contains(paramName) &&
+                                data.isNotEmpty) {
+                              final displayInfo =
+                                  _getParameterDisplayInfo(paramName);
+                              String displayName = displayInfo['displayName'];
+                              String unit = displayInfo['unit'];
+                              return _buildChartContainer(
+                                displayName,
+                                data,
+                                unit.isNotEmpty
+                                    ? '$displayName ($unit)'
+                                    : displayName,
+                                ChartType.line,
+                              );
+                            }
+                            return const SizedBox.shrink();
+                          }).toList(),
+                        if (widget.deviceName.startsWith('CF'))
+                          ...cfParametersData.entries.map((entry) {
+                            String paramName = entry.key;
+                            List<ChartData> data = entry.value;
+
+                            // Exclude specified parameters
+                            List<String> excludedParams = [
+                              'Longitude',
+                              'Latitude',
+                              'SignalStrength',
+                              'BatteryVoltage',
+                              'MaximumTemperature',
+                              'MinimumTemperature',
+                              'AverageTemperature',
+                              'RainfallDaily',
+                              'RainfallWeekly',
+                              'AverageHumidity',
+                              'MinimumHumidity',
+                              'MaximumHumidity',
+                            ];
+
+                            if (!excludedParams.contains(paramName) &&
+                                data.isNotEmpty) {
+                              print(
+                                  'Processing CF Parameter: $paramName, Data Length: ${data.length}');
+
+                              final displayInfo =
+                                  _getParameterDisplayInfo(paramName);
+                              String displayName = displayInfo['displayName'];
+                              String unit = displayInfo['unit'];
+                              print(
+                                  'Display Info for $paramName: displayName=$displayName, unit=$unit');
+
+                              // Customize chart title for specific parameters
+                              String chartTitle;
+                              if (paramName.toLowerCase() ==
+                                  'currenthumidity') {
+                                chartTitle = 'Humidity Graph ($unit)';
+                              } else if (paramName.toLowerCase() ==
+                                  'currenttemperature') {
+                                chartTitle = 'Temperature Graph ($unit)';
+                              } else {
+                                chartTitle = unit.isNotEmpty
+                                    ? '$displayName ($unit)'
+                                    : displayName;
+                              }
+                              print('Chart Title for $paramName: $chartTitle');
+
+                              return _buildChartContainer(
+                                displayName,
+                                data,
+                                chartTitle,
+                                ChartType.line,
+                              );
+                            } else {
+                              print(
+                                  'Skipping CF Parameter: $paramName, Excluded: ${excludedParams.contains(paramName)}, Data Empty: ${data.isEmpty}');
+                            }
+                            return const SizedBox.shrink();
+                          }).toList(),
+
+                        if (widget.deviceName.startsWith('SV'))
+                          ...svParametersData.entries.map((entry) {
+                            String paramName = entry.key;
+                            List<ChartData> data = entry.value;
+
+                            // Exclude specified parameters
+                            List<String> excludedParams = [
+                              'Longitude',
+                              'Latitude',
+                              'SignalStrength',
+                              'BatteryVoltage',
+                              'MaximumTemperature',
+                              'MinimumTemperature',
+                              'AverageTemperature',
+                              'RainfallDaily',
+                              'RainfallWeekly',
+                              'AverageHumidity',
+                              'MinimumHumidity',
+                              'MaximumHumidity',
+                            ];
+
+                            if (!excludedParams.contains(paramName) &&
+                                data.isNotEmpty) {
+                              print(
+                                  'Processing SV Parameter: $paramName, Data Length: ${data.length}');
+
+                              final displayInfo =
+                                  _getParameterDisplayInfo(paramName);
+                              String displayName = displayInfo['displayName'];
+                              String unit = displayInfo['unit'];
+                              print(
+                                  'Display Info for $paramName: displayName=$displayName, unit=$unit');
+
+                              // Customize chart title for specific parameters
+                              String chartTitle;
+                              if (paramName.toLowerCase() ==
+                                  'currenthumidity') {
+                                chartTitle = 'Humidity Graph ($unit)';
+                              } else if (paramName.toLowerCase() ==
+                                  'currenttemperature') {
+                                chartTitle = 'Temperature Graph ($unit)';
+                              } else {
+                                chartTitle = unit.isNotEmpty
+                                    ? '$displayName ($unit)'
+                                    : displayName;
+                              }
+                              print('Chart Title for $paramName: $chartTitle');
+
+                              return _buildChartContainer(
+                                displayName,
+                                data,
+                                chartTitle,
+                                ChartType.line,
+                              );
+                            } else {
+                              print(
+                                  'Skipping SV Parameter: $paramName, Excluded: ${excludedParams.contains(paramName)}, Data Empty: ${data.isEmpty}');
+                            }
+                            return const SizedBox.shrink();
+                          }).toList(),
+                        // Non-SM sensor parameters
+                        if (!widget.deviceName.startsWith('SM') &&
+                            !widget.deviceName.startsWith('CM') &&
+                            !widget.deviceName.startsWith('SV')) ...[
+                          if (hasNonZeroValues(chlorineData))
+                            _buildChartContainer('Chlorine', chlorineData,
+                                'Chlorine (mg/L)', ChartType.line),
+                          if (hasNonZeroValues(temperatureData))
+                            _buildChartContainer('Temperature', temperatureData,
+                                'Temperature (°C)', ChartType.line),
+                          if (hasNonZeroValues(humidityData))
+                            _buildChartContainer('Humidity', humidityData,
+                                'Humidity (%)', ChartType.line),
+                          if (hasNonZeroValues(lightIntensityData))
+                            _buildChartContainer(
+                                'Light Intensity',
+                                lightIntensityData,
+                                'Light Intensity (Lux)',
+                                ChartType.line),
+                          if (hasNonZeroValues(windSpeedData))
+                            _buildChartContainer('Wind Speed', windSpeedData,
+                                'Wind Speed (m/s)', ChartType.line),
+                          if (hasNonZeroValues(solarIrradianceData))
+                            _buildChartContainer(
+                                'Solar Irradiance',
+                                solarIrradianceData,
+                                'Solar Irradiance (W/M^2)',
+                                ChartType.line),
+                          if (hasNonZeroValues(tempData))
+                            _buildChartContainer('Temperature', tempData,
+                                'Temperature (°C)', ChartType.line),
+                          if (hasNonZeroValues(tdsData))
+                            _buildChartContainer(
+                                'TDS', tdsData, 'TDS (ppm)', ChartType.line),
+                          if (hasNonZeroValues(codData))
+                            _buildChartContainer(
+                                'COD', codData, 'COD (mg/L)', ChartType.line),
+                          if (hasNonZeroValues(bodData))
+                            _buildChartContainer(
+                                'BOD', bodData, 'BOD (mg/L)', ChartType.line),
+                          if (hasNonZeroValues(pHData))
+                            _buildChartContainer(
+                                'pH', pHData, 'pH', ChartType.line),
+                          if (hasNonZeroValues(doData))
+                            _buildChartContainer(
+                                'DO', doData, 'DO (mg/L)', ChartType.line),
+                          if (hasNonZeroValues(ecData))
+                            _buildChartContainer(
+                                'EC', ecData, 'EC (mS/cm)', ChartType.line),
+                          if (hasNonZeroValues(temppData))
+                            _buildChartContainer('Temperature', temppData,
+                                'Temperature (°C)', ChartType.line),
+                          if (hasNonZeroValues(electrodeSignalData))
+                            _buildChartContainer(
+                                'Electrode Signal',
+                                electrodeSignalData,
+                                'Electrode Signal (mV)',
+                                ChartType.line),
+                          if (hasNonZeroValues(residualchlorineData))
+                            _buildChartContainer(
+                                'Chlorine',
+                                residualchlorineData,
+                                'Chlorine (mg/L)',
+                                ChartType.line),
+                          if (hasNonZeroValues(hypochlorousData))
+                            _buildChartContainer(
+                                'Hypochlorous',
+                                hypochlorousData,
+                                'Hypochlorous (mg/L)',
+                                ChartType.line),
+                          if (hasNonZeroValues(temmppData))
+                            _buildChartContainer('Temperature', temmppData,
+                                'Temperature (°C)', ChartType.line),
+                          if (hasNonZeroValues(humidityyData))
+                            _buildChartContainer('Humidity', humidityyData,
+                                'Humidity (%)', ChartType.line),
+                          if (hasNonZeroValues(lightIntensityyData))
+                            _buildChartContainer(
+                                'Light Intensity',
+                                lightIntensityyData,
+                                'Light Intensity (Lux)',
+                                ChartType.line),
+                          if (hasNonZeroValues(windSpeeddData))
+                            _buildChartContainer('Wind Speed', windSpeeddData,
+                                'Wind Speed (m/s)', ChartType.line),
+                          if (hasNonZeroValues(ttempData))
+                            _buildChartContainer('Temperature', ttempData,
+                                'Temperature (°C)', ChartType.line),
+                          if (hasNonZeroValues(dovaluedata))
+                            _buildChartContainer('DO Value', dovaluedata,
+                                'DO (mg/L)', ChartType.line),
+                          if (hasNonZeroValues(dopercentagedata))
+                            _buildChartContainer(
+                                'DO Percentage',
+                                dopercentagedata,
+                                'DO Percentage (%)',
+                                ChartType.line),
+                          if (hasNonZeroValues(temperaturData))
+                            _buildChartContainer('Temperature', temperaturData,
+                                'Temperature (°C)', ChartType.line),
+                          if (hasNonZeroValues(humData))
+                            _buildChartContainer('Humidity', humData,
+                                'Humidity (%)', ChartType.line),
+                          if (hasNonZeroValues(luxData))
+                            _buildChartContainer('Light Intensity', luxData,
+                                'Lux (Lux)', ChartType.line),
+                          if (hasNonZeroValues(coddata))
+                            _buildChartContainer(
+                                'COD', coddata, 'COD (mg/L)', ChartType.line),
+                          if (hasNonZeroValues(boddata))
+                            _buildChartContainer(
+                                'BOD', boddata, 'BOD (mg/L)', ChartType.line),
+                          if (hasNonZeroValues(phdata))
+                            _buildChartContainer(
+                                'pH', luxData, 'pH', ChartType.line),
+                          if (hasNonZeroValues(temperattureData))
+                            _buildChartContainer(
+                                'Temperature',
+                                temperattureData,
+                                'Temperature (°C)',
+                                ChartType.line),
+                          if (hasNonZeroValues(humidittyData))
+                            _buildChartContainer('Humidity', humidittyData,
+                                'Humidity (%)', ChartType.line),
+                          if (hasNonZeroValues(ammoniaData))
+                            _buildChartContainer('Ammonia', ammoniaData,
+                                'Ammonia (PPM)', ChartType.line),
+                          if (hasNonZeroValues(temperaturedata))
+                            _buildChartContainer('Temperature', temperaturedata,
+                                'Temperature (°C)', ChartType.line),
+                          if (hasNonZeroValues(humiditydata))
+                            _buildChartContainer('Humidity', humiditydata,
+                                'Humidity (%)', ChartType.line),
+                          // if (hasNonZeroValues(rfdData))
+                          // _buildChartContainer(
+                          //     'RFD', rfdData, 'RFD (mm)', ChartType.line),
+                          // if (hasNonZeroValues(rfsData))
                           _buildChartContainer(
-                              'Light Intensity',
-                              lightIntensityData,
-                              'Light Intensity (Lux)',
-                              ChartType.line),
-                        if (hasNonZeroValues(windSpeedData))
-                          _buildChartContainer('Wind Speed', windSpeedData,
-                              'Wind Speed (m/s)', ChartType.line),
-                        if (hasNonZeroValues(solarIrradianceData))
-                          _buildChartContainer(
-                              'Solar Irradiance',
-                              solarIrradianceData,
-                              'Solar Irradiance (W/M^2)',
-                              ChartType.line),
-                        if (hasNonZeroValues(tempData))
-                          _buildChartContainer('Temperature', tempData,
-                              'Temperature (°C)', ChartType.line),
-                        if (hasNonZeroValues(tdsData))
-                          _buildChartContainer(
-                              'TDS', tdsData, 'TDS (ppm)', ChartType.line),
-                        if (hasNonZeroValues(codData))
-                          _buildChartContainer(
-                              'COD', codData, 'COD (mg/L)', ChartType.line),
-                        if (hasNonZeroValues(bodData))
-                          _buildChartContainer(
-                              'BOD', bodData, 'BOD (mg/L)', ChartType.line),
-                        if (hasNonZeroValues(pHData))
-                          _buildChartContainer(
-                              'pH', pHData, 'pH', ChartType.line),
-                        if (hasNonZeroValues(doData))
-                          _buildChartContainer(
-                              'DO', doData, 'DO (mg/L)', ChartType.line),
-                        if (hasNonZeroValues(ecData))
-                          _buildChartContainer(
-                              'EC', ecData, 'EC (mS/cm)', ChartType.line),
-                        if (hasNonZeroValues(temppData))
-                          _buildChartContainer('Temperature', temppData,
-                              'Temperature (°C)', ChartType.line),
-                        if (hasNonZeroValues(electrodeSignalData))
-                          _buildChartContainer(
-                              'Electrode Signal',
-                              electrodeSignalData,
-                              'Electrode Signal (mV)',
-                              ChartType.line),
-                        if (hasNonZeroValues(residualchlorineData))
-                          _buildChartContainer('Chlorine', residualchlorineData,
-                              'Chlorine (mg/L)', ChartType.line),
-                        if (hasNonZeroValues(hypochlorousData))
-                          _buildChartContainer('Hypochlorous', hypochlorousData,
-                              'Hypochlorous (mg/L)', ChartType.line),
-                        if (hasNonZeroValues(temmppData))
-                          _buildChartContainer('Temperature', temmppData,
-                              'Temperature (°C)', ChartType.line),
-                        if (hasNonZeroValues(humidityyData))
-                          _buildChartContainer('Humidity', humidityyData,
-                              'Humidity (%)', ChartType.line),
-                        if (hasNonZeroValues(lightIntensityyData))
-                          _buildChartContainer(
-                              'Light Intensity',
-                              lightIntensityyData,
-                              'Light Intensity (Lux)',
-                              ChartType.line),
-                        if (hasNonZeroValues(windSpeeddData))
-                          _buildChartContainer('Wind Speed', windSpeeddData,
-                              'Wind Speed (m/s)', ChartType.line),
-                        if (hasNonZeroValues(ttempData))
-                          _buildChartContainer('Temperature', ttempData,
-                              'Temperature (°C)', ChartType.line),
-                        if (hasNonZeroValues(dovaluedata))
-                          _buildChartContainer('DO Value', dovaluedata,
-                              'DO (mg/L)', ChartType.line),
-                        if (hasNonZeroValues(dopercentagedata))
-                          _buildChartContainer(
-                              'DO Percentage',
-                              dopercentagedata,
-                              'DO Percentage (%)',
-                              ChartType.line),
-                        if (hasNonZeroValues(temperaturData))
-                          _buildChartContainer('Temperature', temperaturData,
-                              'Temperature (°C)', ChartType.line),
-                        if (hasNonZeroValues(humData))
-                          _buildChartContainer('Humidity', humData,
-                              'Humidity (%)', ChartType.line),
-                        if (hasNonZeroValues(luxData))
-                          _buildChartContainer('Light Intensity', luxData,
-                              'Lux (Lux)', ChartType.line),
-                        if (hasNonZeroValues(coddata))
-                          _buildChartContainer(
-                              'COD', coddata, 'COD (mg/L)', ChartType.line),
-                        if (hasNonZeroValues(boddata))
-                          _buildChartContainer(
-                              'BOD', boddata, 'BOD (mg/L)', ChartType.line),
-                        if (hasNonZeroValues(phdata))
-                          _buildChartContainer(
-                              'pH', luxData, 'pH', ChartType.line),
-                        if (hasNonZeroValues(temperattureData))
-                          _buildChartContainer('Temperature', temperattureData,
-                              'Temperature (°C)', ChartType.line),
-                        if (hasNonZeroValues(humidittyData))
-                          _buildChartContainer('Humidity', humidittyData,
-                              'Humidity (%)', ChartType.line),
-                        if (hasNonZeroValues(ammoniaData))
-                          _buildChartContainer('Ammonia', ammoniaData,
-                              'Ammonia (PPM)', ChartType.line),
-                        if (hasNonZeroValues(temperaturedata))
-                          _buildChartContainer('Temperature', temperaturedata,
-                              'Temperature (°C)', ChartType.line),
-                        if (hasNonZeroValues(humiditydata))
-                          _buildChartContainer('Humidity', humiditydata,
-                              'Humidity (%)', ChartType.line),
+                              'RFS', rfsData, 'RFS (mm)', ChartType.line),
+                          if (hasNonZeroValues(ittempData))
+                            _buildChartContainer('Temperature', ittempData,
+                                'Temperature (°C)', ChartType.line),
+                          if (hasNonZeroValues(itpressureData))
+                            _buildChartContainer('Pressure', itpressureData,
+                                'Pressure (hPa)', ChartType.line),
+                          if (hasNonZeroValues(ithumidityData))
+                            _buildChartContainer('Humidity', ithumidityData,
+                                'Humidity (%)', ChartType.line),
+                          // if (hasNonZeroValues(itrainData))
+                          _buildChartContainer('Rain Level', itrainData,
+                              'Rain Level (mm)', ChartType.line),
+                          if (hasNonZeroValues(itvisibilityData))
+                            _buildChartContainer('Wind Speed', itwindspeedData,
+                                'Wind Speed (m/s)', ChartType.line),
+                          if (hasNonZeroValues(itradiationData))
+                            _buildChartContainer('Radiation', itradiationData,
+                                'Radiation (W/m²)', ChartType.line),
+                          if (hasNonZeroValues(itvisibilityData))
+                            _buildChartContainer('Visibilty', itvisibilityData,
+                                'Visibility (m)', ChartType.line),
+                          if (hasNonZeroValues(fstempData))
+                            _buildChartContainer('Temperature', fstempData,
+                                'Temperature (°C)', ChartType.line),
+                          if (hasNonZeroValues(fspressureData))
+                            _buildChartContainer('Pressure', fspressureData,
+                                'Pressure (hPa)', ChartType.line),
+                          if (hasNonZeroValues(fshumidityData))
+                            _buildChartContainer('Relative Humidity',
+                                fshumidityData, 'Humidity (%)', ChartType.line),
+                          // if (hasNonZeroValues(itrainData))
+                          _buildChartContainer('Rain Level', fsrainData,
+                              'Rain Level (mm)', ChartType.line),
+                          if (hasNonZeroValues(fsradiationData))
+                            _buildChartContainer('Radiation', fsradiationData,
+                                'Radiation (W/m²)', ChartType.line),
+
+                          if (hasNonZeroValues(fswindspeedData))
+                            _buildChartContainer('Wind Speed', fswindspeedData,
+                                'Wind Speed (m/s)', ChartType.line),
+
+                          if (hasNonZeroValues(temp2Data))
+                            _buildChartContainer('Temperature', temp2Data,
+                                'Temperature (°C)', ChartType.line),
+
+                          if (hasNonZeroValues(cod2Data))
+                            _buildChartContainer(
+                                'COD', cod2Data, 'COD (mg/L)', ChartType.line),
+                          if (hasNonZeroValues(bod2Data))
+                            _buildChartContainer(
+                                'BOD', bod2Data, 'BOD (mg/L)', ChartType.line),
+
+                          // // if (hasNonZeroValues(fsrfdData))
+                          // _buildChartContainer(
+                          //     'RFD', fsrfdData, 'RFD (mm)', ChartType.line),
+                          // if (hasNonZeroValues(rfsData))
+                        ],
                       ],
                     )
                   ],
@@ -2602,7 +4706,7 @@ class _DeviceGraphPageState extends State<DeviceGraphPage> {
           Text(
             '$parameterName: $currentValue $unit',
             style: TextStyle(
-                color: Colors.white, fontSize: 16, fontWeight: FontWeight.bold),
+                color: Colors.white, fontSize: 20, fontWeight: FontWeight.bold),
           ),
         ],
       ),
@@ -2633,6 +4737,26 @@ class _DeviceGraphPageState extends State<DeviceGraphPage> {
       return Icons.battery_4_bar; // 80% battery
     } else if (batteryPercentage > 80 && batteryPercentage < 100) {
       return Icons.battery_5_bar; // 90% battery
+    } else {
+      return Icons.battery_full; // Full battery
+    }
+  }
+
+  Color _getBatteryColor(double voltage) {
+    if (voltage < 3.3) {
+      return Colors.red;
+    } else if (voltage < 4.0) {
+      return Colors.orange;
+    } else {
+      return Colors.green;
+    }
+  }
+
+  IconData _getfsBatteryIcon(double voltage) {
+    if (voltage < 3.3) {
+      return Icons.battery_2_bar; // Low battery
+    } else if (voltage < 4.0) {
+      return Icons.battery_5_bar; // Medium battery
     } else {
       return Icons.battery_full; // Full battery
     }
@@ -2853,7 +4977,7 @@ class _DeviceGraphPageState extends State<DeviceGraphPage> {
                                 enablePinching: true,
                                 enableMouseWheelZooming: isShiftPressed,
                               ),
-                              series: <ChartSeries<ChartData, DateTime>>[
+                              series: <CartesianSeries<ChartData, DateTime>>[
                                 _getChartSeries(chartType, data, title),
                               ],
                             ),
@@ -2890,7 +5014,7 @@ class _DeviceGraphPageState extends State<DeviceGraphPage> {
     );
   }
 
-  ChartSeries<ChartData, DateTime> _getChartSeries(
+  CartesianSeries<ChartData, DateTime> _getChartSeries(
       ChartType chartType, List<ChartData> data, String title) {
     switch (chartType) {
       case ChartType.line:

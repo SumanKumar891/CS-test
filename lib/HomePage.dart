@@ -1,3 +1,4 @@
+import 'package:amplify_flutter/amplify_flutter.dart';
 import 'package:flutter/foundation.dart';
 import 'package:flutter/material.dart';
 import 'package:shared_preferences/shared_preferences.dart';
@@ -21,7 +22,7 @@ class MyApp extends StatelessWidget {
   Widget build(BuildContext context) {
     final themeProvider = Provider.of<ThemeProvider>(context);
     return MaterialApp(
-      title: 'Cloud Sense Viz',
+      title: 'Cloud Sense Vis',
       theme: themeProvider.isDarkMode ? ThemeData.dark() : ThemeData.light(),
       home: HomePage(),
     );
@@ -63,6 +64,32 @@ class _HomePageState extends State<HomePage> {
   Color _aboutUsColor = const Color.fromARGB(255, 235, 232, 232);
   Color _loginTestColor = const Color.fromARGB(255, 235, 232, 232);
   Color _accountinfoColor = const Color.fromARGB(255, 235, 232, 232);
+  // Color _deviceinfoColor = const Color.fromARGB(255, 235, 232, 232);
+
+  Future<void> _handleLoginNavigation() async {
+    try {
+      var currentUser = await Amplify.Auth.getCurrentUser();
+      var userAttributes = await Amplify.Auth.fetchUserAttributes();
+      String? email;
+      for (var attr in userAttributes) {
+        if (attr.userAttributeKey == AuthUserAttributeKey.email) {
+          email = attr.value;
+          break;
+        }
+      }
+      print('Current user ID: ${currentUser.username}, Email: $email');
+      if (email?.trim().toLowerCase() == '05agriculture.05@gmail.com') {
+        print('Navigating to MapPage (/deviceinfo)');
+        Navigator.pushNamed(context, '/deviceinfo');
+      } else {
+        print('Navigating to DeviceListPage (/devicelist)');
+        Navigator.pushNamed(context, '/devicelist');
+      }
+    } catch (e) {
+      print('No user logged in or error: $e');
+      Navigator.pushNamed(context, '/login');
+    }
+  }
 
   @override
   Widget build(BuildContext context) {
@@ -87,7 +114,7 @@ class _HomePageState extends State<HomePage> {
               ),
               SizedBox(width: isMobile ? 10 : 20),
               Text(
-                'Cloud Sense Viz',
+                'Cloud Sense Vis',
                 style: TextStyle(
                   color: isDarkMode ? Colors.white : Colors.black,
                   fontWeight: FontWeight.bold,
@@ -121,12 +148,16 @@ class _HomePageState extends State<HomePage> {
                 }),
                 SizedBox(width: 20),
                 _buildNavButton('LOGIN/SIGNUP', _loginTestColor, () {
-                  Navigator.pushNamed(context, '/login');
+                  _handleLoginNavigation();
                 }),
                 SizedBox(width: 20),
                 _buildNavButton('ACCOUNT INFO', _accountinfoColor, () {
                   Navigator.pushNamed(context, '/accountinfo');
                 }),
+                // SizedBox(width: 20),
+                // _buildNavButton('DEVICE INFO', _deviceinfoColor, () {
+                //   Navigator.pushNamed(context, '/deviceinfo');
+                // }),
               ],
             ],
           ),
@@ -159,7 +190,7 @@ class _HomePageState extends State<HomePage> {
                       leading: Icon(Icons.login),
                       title: Text('LOGIN/SIGNUP'),
                       onTap: () {
-                        Navigator.pushNamed(context, '/login');
+                        _handleLoginNavigation();
                       },
                     ),
                     ListTile(
@@ -171,9 +202,9 @@ class _HomePageState extends State<HomePage> {
                     ),
                     // ListTile(
                     //   leading: Icon(Icons.login),
-                    //   title: Text('MQTT DATA'),
+                    //   title: Text('DEVICE INFO'),
                     //   onTap: () {
-                    //     Navigator.pushNamed(context, '/mqttdata');
+                    //     Navigator.pushNamed(context, '/deviceinfo');
                     //   },
                     // ),
                   ],
@@ -208,7 +239,7 @@ class _HomePageState extends State<HomePage> {
                       crossAxisAlignment: CrossAxisAlignment.start,
                       children: [
                         Text(
-                          'Welcome to Cloud Sense Viz',
+                          'Welcome to Cloud Sense Vis',
                           style: TextStyle(
                             fontFamily: 'OpenSans',
                             fontSize: MediaQuery.of(context).size.width < 800
@@ -222,7 +253,7 @@ class _HomePageState extends State<HomePage> {
                         Padding(
                           padding: const EdgeInsets.symmetric(horizontal: 0.0),
                           child: Text(
-                            "At Cloud Sense Viz, we're dedicated to providing you with real-time data to help you make informed decisions about your surroundings.Our app uses advanced technology to ensure the data is accurate and timely, giving you the insights you need when it matters most. ",
+                            "At Cloud Sense Vis, we're dedicated to providing you with real-time data to help you make informed decisions about your surroundings.Our app uses advanced technology to ensure the data is accurate and timely, giving you the insights you need when it matters most. ",
                             style: TextStyle(
                               fontSize: MediaQuery.of(context).size.width < 800
                                   ? 16
@@ -365,7 +396,7 @@ class _HomePageState extends State<HomePage> {
                         ),
                         SizedBox(height: 16),
                         Text(
-                          'At Cloud Sense Viz, we aim to revolutionize the way you interact with your surroundings by offering intuitive and seamless monitoring solutions. Our innovative app provides instant access to essential data, giving you the tools to anticipate and respond to changes. With Cloud Sense Viz, you can trust that you’re equipped with the knowledge needed to maintain a safe, healthy, and efficient lifestyle.',
+                          'At Cloud Sense Vis, we aim to revolutionize the way you interact with your surroundings by offering intuitive and seamless monitoring solutions. Our innovative app provides instant access to essential data, giving you the tools to anticipate and respond to changes. With Cloud Sense Vis, you can trust that you’re equipped with the knowledge needed to maintain a safe, healthy, and efficient lifestyle.',
                           style: TextStyle(
                             fontSize: MediaQuery.of(context).size.width < 800
                                 ? 14
@@ -380,89 +411,6 @@ class _HomePageState extends State<HomePage> {
                 ],
               ),
               SizedBox(height: 0),
-
-              Container(
-                color: isDarkMode
-                    ? const Color.fromARGB(255, 32, 29, 29)
-                    : const Color.fromARGB(255, 231, 231, 231),
-                width: double.infinity,
-                padding: EdgeInsets.all(20),
-                child: Column(
-                  crossAxisAlignment: CrossAxisAlignment.center,
-                  children: [
-                    Text(
-                      'Address : IIT Ropar TIF (AWaDH), 214 / M. Visvesvaraya Block, Indian Institute of Technology Ropar, Rupnagar - 140001, Punjab ',
-                      style: TextStyle(
-                        color: isDarkMode ? Colors.white : Colors.black,
-                        fontSize: 16,
-                      ),
-                    ),
-                    SizedBox(height: 18),
-                    GestureDetector(
-                      onTap: () async {
-                        final Uri launchUri = Uri(
-                          scheme: 'tel',
-                          path: '01881-232601',
-                        );
-
-                        if (await canLaunchUrl(launchUri)) {
-                          await launchUrl(launchUri);
-                        } else {
-                          throw 'Could not launch $launchUri';
-                        }
-                      },
-                      child: RichText(
-                        text: TextSpan(
-                          style: TextStyle(
-                            color: isDarkMode ? Colors.white : Colors.black,
-                          ),
-                          children: [
-                            TextSpan(text: 'Phone : '),
-                            TextSpan(
-                              text: '01881 - 232601',
-                              style: TextStyle(
-                                decoration: TextDecoration.underline,
-                              ),
-                            ),
-                          ],
-                        ),
-                      ),
-                    ),
-                    SizedBox(height: 18),
-                    GestureDetector(
-                      onTap: () async {
-                        final Uri params = Uri(
-                          scheme: 'mailto',
-                          path: 'contact.awadh@iitrpr.ac.in',
-                        );
-
-                        // Check if the email URL can be launched
-                        if (await canLaunchUrl(params)) {
-                          await launchUrl(params);
-                        } else {
-                          throw ('Could not launch $params');
-                        }
-                      },
-                      child: RichText(
-                        text: TextSpan(
-                          style: TextStyle(
-                            color: isDarkMode ? Colors.white : Colors.black,
-                          ),
-                          children: [
-                            TextSpan(text: 'Email : '),
-                            TextSpan(
-                              text: 'contact.awadh@iitrpr.ac.in',
-                              style: TextStyle(
-                                decoration: TextDecoration.underline,
-                              ),
-                            ),
-                          ],
-                        ),
-                      ),
-                    ),
-                  ],
-                ),
-              ),
             ],
           ),
         ),
@@ -487,6 +435,8 @@ class _HomePageState extends State<HomePage> {
           _loginTestColor = const Color.fromARGB(255, 235, 232, 232);
         if (text == 'ACCOUNT INFO')
           _accountinfoColor = const Color.fromARGB(255, 235, 232, 232);
+        // if (text == 'DEVICE INFO')
+        //   _deviceinfoColor = const Color.fromARGB(255, 235, 232, 232);
         // if (text == 'MQTT DATA')
         //   _mqttdataColor = const Color.fromARGB(255, 235, 232, 232);
       }),

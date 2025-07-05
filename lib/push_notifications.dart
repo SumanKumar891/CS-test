@@ -1,9 +1,46 @@
 import 'package:firebase_messaging/firebase_messaging.dart';
+import 'package:flutter_local_notifications/flutter_local_notifications.dart';
+import 'package:flutter/material.dart';
 
-// Background notification handler (runs when app is in the background or terminated)
+// Initialize Flutter Local Notifications
+final FlutterLocalNotificationsPlugin flutterLocalNotificationsPlugin =
+    FlutterLocalNotificationsPlugin();
+
+// Background notification handler (when the app is in the background or terminated)
 Future<void> handleBackgroundMessage(RemoteMessage message) async {
   print(
-      "Background Notification: ${message.notification?.title} - ${message.notification?.body}");
+      " Background Notification: ${message.notification?.title} - ${message.notification?.body}");
+  showNotification(message); // Ensure background notifications are shown
+}
+
+// Function to display local notifications
+void showNotification(RemoteMessage message) async {
+  RemoteNotification? notification = message.notification;
+  AndroidNotification? android = message.notification?.android;
+
+  if (notification != null && android != null) {
+    const AndroidNotificationDetails androidPlatformChannelSpecifics =
+        AndroidNotificationDetails(
+      'high_importance_channel', // Same ID as defined in `main.dart`
+      'High Importance Notifications',
+      channelDescription: 'This channel is used for important notifications.',
+      importance: Importance.max,
+      priority: Priority.high,
+      playSound: true,
+    );
+
+    const NotificationDetails platformChannelSpecifics = NotificationDetails(
+      android: androidPlatformChannelSpecifics,
+    );
+
+    await flutterLocalNotificationsPlugin.show(
+      notification.hashCode,
+      notification.title,
+      notification.body,
+      platformChannelSpecifics,
+      payload: message.data['ammonia_level'] ?? '',
+    );
+  }
 }
 
 class PushNotifications {
@@ -12,44 +49,41 @@ class PushNotifications {
   // Initialize Firebase Cloud Messaging (FCM) notifications
   Future<void> initNotifications() async {
     // Request user permission for push notifications (iOS/Android)
-    await _firebaseMessaging.requestPermission();
+    await _firebaseMessaging.requestPermission(
+      alert: false,
+      badge: true,
+      sound: true,
+    );
 
     // Get and print FCM token (used to identify the device)
-    final fCMToken = await _firebaseMessaging.getToken();
-    print("Token : $fCMToken");
+    final fcmToken = await _firebaseMessaging.getToken();
+    print("🔑 FCM Token: $fcmToken");
 
     // Set up background notification handler
     FirebaseMessaging.onBackgroundMessage(handleBackgroundMessage);
 
-    // Listen for foreground notifications (when app is open)
+    // Listen for foreground notifications (when the app is open)
     FirebaseMessaging.onMessage.listen((RemoteMessage message) {
-      if (message.notification != null) {
-        print(
-            "Foreground Notification: ${message.notification?.title} - ${message.notification?.body}");
+      print(
+          " Foreground Notification: ${message.notification?.title} - ${message.notification?.body}");
+      // showNotification(message); // Show local notification in foreground
+      if (message.data.isNotEmpty) {
+        showNotification(message); // Show notification only if SNS sends one
       }
     });
-  }
 
-  // Retrieve Firebase Installation ID (FCM token)
-  Future<void> getFirebaseInstallationID() async {
-    String? fid = await _firebaseMessaging.getToken();
-    print('Firebase Installation ID: $fid');
-  }
+    // Listen for when the user taps a notification
+    FirebaseMessaging.onMessageOpenedApp.listen((RemoteMessage message) {
+      print("📲 User tapped on notification: ${message.data}");
+    });
 
-  // Simulate sending an ammonia alert notification
-  Future<void> sendAmmoniaAlertNotification(double ammoniaValue) async {
-    // Create notification payload (title and body)
-    RemoteNotification notification = RemoteNotification(
-      title: 'Ammonia Alert',
-      body: 'Ammonia level exceeded threshold: $ammoniaValue ppm',
-    );
+    // Initialize Local Notifications
+    const AndroidInitializationSettings initializationSettingsAndroid =
+        AndroidInitializationSettings('@mipmap/ic_launcher');
 
-    // Add custom data to the notification
-    Map<String, String> data = {
-      'ammoniaValue': ammoniaValue.toString(),
-    };
+    const InitializationSettings initializationSettings =
+        InitializationSettings(android: initializationSettingsAndroid);
 
-    // Placeholder for sending notification via FCM Cloud Functions or API
-    print('Sending Notification: ${notification.title} - ${notification.body}');
+    await flutterLocalNotificationsPlugin.initialize(initializationSettings);
   }
 }
